@@ -1,0 +1,40 @@
+---
+  # sample rate
+  fr : 15.49
+
+  # constant by which to scale the neuropil signal before subtracting it
+  # to the raw fluoressence signal
+  neuropil_corr : 0.7
+
+  #maximum numeber of frames after trial to keep.
+  max_aftertrial: 200
+  
+  # number of frames to use for extracting the baseline activity.
+  baseline_frames : 40
+
+  # how to extract the baseline activity for computing df/f for each trial:
+  # 0: extract the baseline for each trial independentely 
+  # 1: extract the baseline only at the beginning of each stimulation condition
+  baseline_extraction : 0
+
+  # list or tuple containing the start and end frames to use for computing df/f 
+  # on the whole recording. if null, the baseline will be automatcally 
+  # extracted at the beginning of the recording.
+  baseline_indices : null
+
+  # critical frequency (normalized) of the lowpass filter used for smoothing the data. 
+  lowpass_wn : 0.3
+
+  # quality index threshold above which an roi is considered respnsive
+  qi_threshold : 0.45
+
+  # wether to keep only the cells that passed the suite2p classifier
+  use_iscell: 0
+
+  # z-score threshold above which spkikes are kept
+  spks_threshold : 1.5
+
+  # criteria to use for assesing overall responsiveness of cells:
+  # 0: the cell is responsive if it significatively respond to at least one stimulation condition
+  # 1: the cell is responsive if it significatively respond to all the stimulation condition
+  resp_criteria : 0
