@@ -30,7 +30,7 @@ DEFAULT_PARAMS = {}
 class Rec2P:
 
     """
-    A master recording object
+    A recording master object
     """
 
     def __init__(self, data_path: str, sync: Sync):
@@ -804,21 +804,26 @@ class Batch2P:
         generate_params_file()
 
         # instantiate the Rec2P objects
-        self.recs = []
+        self.recs = {}
 
-        for i, (data_path, sync) in enumerate(data_dict):
+        for id, (data_path, sync) in enumerate(data_dict):
 
             rec = Rec2P(data_path, sync)
-            self.recs.append(rec)
-
+            self.recs |= {id:rec}
         
-    def get_cells():
-        return
+    def get_cells(self):
 
+        """
+        Extract all the cells from the individual recordings and assign new ids.
+        First number of the id specify the recording id."""
 
+        self.cells = {}
 
+        for (rec_id,rec) in self.recs:
 
+            for (cell_id,cell) in rec.cells:
 
+                cells |= {str(rec_id)+"_"+str(cell_id):cell}
 
 
 
