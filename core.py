@@ -128,10 +128,12 @@ class Rec2P:
 
         return ids
 
-    def get_cells(self, 
-                  keep_unresponsive: bool = False, 
-                  n: int = None,
-                  clean_memory = True):
+    def get_cells(
+        self, 
+        keep_unresponsive: bool = False, 
+        n: int = None,
+        clean_memory = True
+        ):
 
         """
         Retrive the cells from the recording files.
@@ -800,6 +802,34 @@ class Batch2P:
         
         """
 
+        # be sure that the sync object of all the recordings share at least 1 stimulus.
+        # only shared stimuli will be used.
+
+        self.stims_trials_intersection = {}
+
+        stims_allrec = [sync.stims_names for sync in data_dict.values()]
+
+        stims_intersection = set(stims[0])
+
+        for stims in stims_allrec:
+
+            stims_intersection.intersect(set(stims))
+
+        # also, for all the shared stimuli,
+        # select only trials type are shared for that specific stimulus by all recs.
+
+        for stim in stims_intersection:
+
+            trials_intersection = set()
+
+            for sync in data_dict.values():
+
+                # last item is "window_len"
+                trials_intersection.intersect(set(list(sync.sync_ds[stim].keys())[:-1]))
+
+            self.stims_trials_intersection |= {stim:list(trials_intersection)}
+
+        
         # generate params.yaml
         generate_params_file()
 
@@ -810,6 +840,18 @@ class Batch2P:
 
             rec = Rec2P(data_path, sync)
             self.recs |= {id:rec}
+
+        self.cells = None
+
+    def load_params(self):
+
+        """
+        Read parameters from .yaml params file
+        """
+
+        for rec in self.recs:
+
+            rec.load_params()
         
     def get_cells(self):
 
@@ -819,11 +861,247 @@ class Batch2P:
 
         self.cells = {}
 
-        for (rec_id,rec) in self.recs:
+        for (rec_id,rec) in self.recs.items():
 
-            for (cell_id,cell) in rec.cells:
+            # retrive cells for each recording
+            rec.get_cells()
+
+            for (cell_id,cell) in rec.cells.items():
 
                 cells |= {str(rec_id)+"_"+str(cell_id):cell}
+
+    def get_responsive(self):
+
+        """
+        Get a list containing the ids of all the responsive cells
+        """
+
+        ids = []
+
+        for cell in self.cells:
+
+            if self.cells[cell].responsive:
+
+                ids.append(cell)
+
+        return ids
+
+    def get_populations(
+        self,
+        stims_names=None,
+        trials_names=None,
+        n_clusters=None,
+        use_tsne=False,
+        type="dff",
+        normalize="norm",
+        plot=True,
+        ):
+
+        """
+        Clusterize the activity traces of all the cells into population using PCA and K-means.
+
+        -stims_names: list
+            The stimulation conditions to use for extracting the response feature of each cell.
+            By default the respopnses to all the stimuli will be used.
+        -trials_names: list
+            The responses to the specified trials will be concatenated and used as features for
+            th PCA, for all the stimuli specified by stims_names.
+            By default the respopnses to all the trial types will be used.
+        -n_clusters: int
+            Number of cluster to use for k means clustering
+        -use_tsne: bool
+            wether to compute tsne embedding after PCA decomposition
+        -type: str
+            can be either "dff" or "zspks"
+        -normalize: str
+            'norm': signals will be normalized between 0 and 1 before running PCA
+            'z': signals will be normalized using z score normalization before running PCA
+            otherwise, no normalization will be applied
+
+        """
+
+        # check if the cells have already been retrived
+        if self.cells == None:
+
+            self.get_cells()
+
+        all_mean_resp = []
+
+        if stims_names == None:
+
+            stims_names = list(self.stims_trials_intersection.keys())
+
+        responsive = self.get_responsive()
+
+        for cell in responsive:
+
+            average_resp = self.cells[cell].analyzed_trials
+
+            # concatenate the mean responses to all the trials specified by trial_names,
+            # for all the stimuli specified by stim_names.
+
+            concat_stims = []
+
+            for stim in stims_names:
+
+                # check if specified stims are in stims_trials_intersection
+                if stim not in self.stims_trials_intersection:
+
+                    warnings.warn("WARNING: stimulus '%s' is not shared by all the recordings,so itwill be skipped"%stim, 
+                                  RuntimeWarning)
+                    
+                    break
+
+                if trials_names == None:
+
+                    trials_names = self.stims_trials_intersection[stim]
+
+                for trial_name in trials_names:
+
+                    # check if specified trial names are in stims_trials_intersection, for each stimuli
+                    if trial_name not in self.stims_trials_intersection[stim]:
+
+                        warnings.warn("WARNING: trial '%s' is not shared by stimulus '%s' all the recordings,so it will be skipped"%(stim,trial_name), 
+                                      RuntimeWarning)
+
+                    r = average_resp[stim][trial_name]["average_" + type]
+
+                    # cut the responses
+                    start = average_resp[stim][trial_name]['window'][0]
+                    stop = average_resp[stim][trial_name]['window'][1]
+
+                    r = r[start:int(stop+start/2)]
+                    # low-pass filter 
+                    r = filter(r,0.3)
+
+                    concat_stims = np.concatenate((concat_stims, r))
+
+            if normalize == "norm":
+
+                concat_stims = (concat_stims - concat_stims.min()) / (concat_stims.max() - concat_stims.min())
+
+            elif normalize == "z":
+
+                concat_stims = z_norm(r, True)
+
+            all_mean_resp.append(concat_stims)
+
+        # convert to array
+        all_mean_resp = np.array(all_mean_resp)
+        x = np.array(all_mean_resp)
+
+        # run PCA and tSNE if desired
+
+        if use_tsne:
+
+            if len(x)<50:
+                n_comp = len(x)
+            else:
+                n_comp = 50
+                
+            # run PCA
+            pca = PCA(n_components=n_comp)
+            transformed = pca.fit_transform(x)
+            # run t-SNE
+            tsne = TSNE(n_components=2, verbose=0, metric='cosine', early_exaggeration=4, perplexity=10, n_iter=2000, init='pca', angle=0)
+            transformed = tsne.fit_transform(transformed)
+        
+        else:
+
+            # run PCA
+            pca = PCA(n_components=3)
+            transformed = pca.fit_transform(x)
+
+        # if the nuber of cluster is not specified, find optimal n
+        if n_clusters == None:
+
+            n_clusters = find_optimal_kmeans_k(transformed)
+
+        # run Kmeans
+        kmeans = KMeans(n_clusters=n_clusters, init="random").fit(transformed)
+        labels = kmeans.labels_
+
+        # retrive clusters
+        clusters = []
+
+        for n in np.unique(labels):
+
+            indices = np.squeeze(np.argwhere(labels == n))
+            c = []
+
+            for i in indices:
+
+                c.append(responsive[i])
+
+            clusters.append(c)
+
+        if plot:
+
+            clist = list(colors.TABLEAU_COLORS.keys())
+
+            if use_tsne:
+
+                algo = "t-SNE"
+
+                Xax = transformed[:, 0]
+                Yax = transformed[:, 1]
+
+                cdict = {0: "c", 1: "g", 2: "r", 3: "y", 4:"m"}
+
+                fig = plt.figure(figsize=(7, 5))
+                ax = fig.add_subplot(111)
+
+                fig.patch.set_facecolor("white")
+
+                for l in np.unique(labels):
+
+                    ix = np.where(labels == l)
+                    ax.scatter(
+                        Xax[ix], Yax[ix], 
+                        c=clist[l],
+                        s=50, 
+                        marker='o',
+                        alpha=0.5
+                    )
+
+                ax.set_xlabel("%s 1"%algo, fontsize=9)
+                ax.set_ylabel("%s 2"%algo, fontsize=9)
+
+
+            else:
+
+                algo = "PCA"
+
+                Xax = transformed[:, 0]
+                Yax = transformed[:, 1]
+                Zax = transformed[:, 2]
+
+                cdict = {0: "c", 1: "g", 2: "r", 3: "y", 4:"m"}
+
+                fig = plt.figure(figsize=(7, 5))
+                # ax = fig.add_subplot(111, projection="3d")
+                ax = fig.add_subplot(111)
+
+                fig.patch.set_facecolor("white")
+
+                for l in np.unique(labels):
+
+                    ix = np.where(labels == l)
+                    # ax.scatter(
+                    #     Xax[ix], Yax[ix], Zax[ix], c=clist[l], s=40)
+                    ax.scatter(
+                          Xax[ix], Yax[ix], c=clist[l], s=40)
+
+                ax.set_xlabel("%s 1"%algo, fontsize=9)
+                ax.set_ylabel("%s 2"%algo, fontsize=9)
+                ax.set_zlabel("%s 3"%algo, fontsize=9)
+
+                ax.view_init(30, 60)
+
+
+        return clusters
+
+
 
 
 
