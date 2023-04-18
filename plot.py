@@ -14,7 +14,7 @@ import warnings
 from math import ceil
 from tqdm import tqdm
 
-from two_phan.core import Rec2P, Cell2P
+from two_phan.core import *
 from two_phan.sync import Sync
 
 
@@ -358,6 +358,9 @@ def draw_singleStim(
 
                     cells_avgs.append(cell.analyzed_trials[stim][trial]["average_" + type])
 
+                # check for lenght consistency
+                cells_avgs = check_len_consistency(cells_avgs)
+
                 resp_dict[trial] |= {"mean":np.mean(cells_avgs,axis=0), "sem":np.std(cells_avgs,axis=0)/np.sqrt(len(cells_avgs))}
     else:
 
@@ -661,6 +664,9 @@ def plot_averages_heatmap(
 
 
         resp_all.append(resp)
+
+        # check for lenght consistency
+        resp_all = check_len_consistency(resp_all)
 
         # stim frames
         stim_frames = []

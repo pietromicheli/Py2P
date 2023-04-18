@@ -809,23 +809,26 @@ class Batch2P:
 
         stims_allrec = [sync.stims_names for sync in data_dict.values()]
 
-        stims_intersection = set(stims[0])
+        stims_intersection = set(stims_allrec[0])
 
-        for stims in stims_allrec:
+        for stims in stims_allrec[1:]:
 
-            stims_intersection.intersect(set(stims))
+            stims_intersection.intersection(set(stims))
 
         # also, for all the shared stimuli,
         # select only trials type are shared for that specific stimulus by all recs.
 
         for stim in stims_intersection:
 
-            trials_intersection = set()
+            # start with trials for stimulus "stim" in first sync object
+            all_trials = list(list(data_dict.values())[0].sync_ds[stim].keys())[:-1]
 
-            for sync in data_dict.values():
+            trials_intersection = set(all_trials)
+
+            for sync in list(data_dict.values())[1:]:
 
                 # last item is "window_len"
-                trials_intersection.intersect(set(list(sync.sync_ds[stim].keys())[:-1]))
+                trials_intersection.intersection(set(list(sync.sync_ds[stim].keys())[:-1]))
 
             self.stims_trials_intersection |= {stim:list(trials_intersection)}
 
@@ -836,7 +839,7 @@ class Batch2P:
         # instantiate the Rec2P objects
         self.recs = {}
 
-        for id, (data_path, sync) in enumerate(data_dict):
+        for id, (data_path, sync) in enumerate(data_dict.items()):
 
             rec = Rec2P(data_path, sync)
             self.recs |= {id:rec}
@@ -847,6 +850,7 @@ class Batch2P:
 
         """
         Read parameters from .yaml params file
+        
         """
 
         for rec in self.recs:
@@ -857,7 +861,9 @@ class Batch2P:
 
         """
         Extract all the cells from the individual recordings and assign new ids.
-        First number of the id specify the recording id."""
+        First number of the id specify the recording id.
+        
+        """
 
         self.cells = {}
 
@@ -868,12 +874,15 @@ class Batch2P:
 
             for (cell_id,cell) in rec.cells.items():
 
-                cells |= {str(rec_id)+"_"+str(cell_id):cell}
+                self.cells |= {str(rec_id)+"_"+str(cell_id):cell}
+
+        return self.cells
 
     def get_responsive(self):
 
         """
         Get a list containing the ids of all the responsive cells
+        
         """
 
         ids = []
@@ -975,7 +984,7 @@ class Batch2P:
                     r = filter(r,0.3)
 
                     concat_stims = np.concatenate((concat_stims, r))
-
+                    
             if normalize == "norm":
 
                 concat_stims = (concat_stims - concat_stims.min()) / (concat_stims.max() - concat_stims.min())
@@ -986,8 +995,12 @@ class Batch2P:
 
             all_mean_resp.append(concat_stims)
 
+        # check lenghts consistency
+        all_mean_resp = check_len_consistency(all_mean_resp)
+        
+
         # convert to array
-        all_mean_resp = np.array(all_mean_resp)
+        # all_mean_resp = np.array(all_mean_resp)
         x = np.array(all_mean_resp)
 
         # run PCA and tSNE if desired
@@ -1046,8 +1059,6 @@ class Batch2P:
                 Xax = transformed[:, 0]
                 Yax = transformed[:, 1]
 
-                cdict = {0: "c", 1: "g", 2: "r", 3: "y", 4:"m"}
-
                 fig = plt.figure(figsize=(7, 5))
                 ax = fig.add_subplot(111)
 
@@ -1067,7 +1078,6 @@ class Batch2P:
                 ax.set_xlabel("%s 1"%algo, fontsize=9)
                 ax.set_ylabel("%s 2"%algo, fontsize=9)
 
-
             else:
 
                 algo = "PCA"
@@ -1075,8 +1085,6 @@ class Batch2P:
                 Xax = transformed[:, 0]
                 Yax = transformed[:, 1]
                 Zax = transformed[:, 2]
-
-                cdict = {0: "c", 1: "g", 2: "r", 3: "y", 4:"m"}
 
                 fig = plt.figure(figsize=(7, 5))
                 # ax = fig.add_subplot(111, projection="3d")
@@ -1090,17 +1098,21 @@ class Batch2P:
                     # ax.scatter(
                     #     Xax[ix], Yax[ix], Zax[ix], c=clist[l], s=40)
                     ax.scatter(
-                          Xax[ix], Yax[ix], c=clist[l], s=40)
+                        Xax[ix], Yax[ix], 
+                        c=clist[l],
+                        s=50, 
+                        marker='o',
+                        alpha=0.5
+                    )
 
                 ax.set_xlabel("%s 1"%algo, fontsize=9)
                 ax.set_ylabel("%s 2"%algo, fontsize=9)
                 ax.set_zlabel("%s 3"%algo, fontsize=9)
 
-                ax.view_init(30, 60)
+                # ax.view_init(30, 60)
 
 
         return clusters
-
 
 
 
@@ -1198,7 +1210,7 @@ def find_optimal_kmeans_k(x):
 
     return round(x_plot[elbow])
 
-def generate_params_file(self):
+def generate_params_file():
 
         """
         Generate a parameters file in the current working dir.
@@ -1219,3 +1231,32 @@ def generate_params_file(self):
             print("> Using the parameters file found in data_path.")
 
             return "params.yaml"
+        
+def check_len_consistency(sequences):
+
+    """
+    Utility function for correcting for length inconsistency in a list of 1-D iterables.
+    It finds the size of the shortes iterable and trim the other iterables accordingly.
+
+    -sequence (list of iterables)
+        list of array-like elements that will be trimmed to the same (minimal) length.
+
+    """
+
+    # find minimal length
+
+    lengths = [len(sequence) for sequence in sequences]
+
+    min_len = np.min(lengths)
+
+    # trim to minimal length
+
+    sequences_new = []
+
+    for sequence in sequences:
+
+        sequences_new.append(sequence[:min_len])
+
+    return sequences_new
+
+    
