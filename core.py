@@ -15,7 +15,7 @@ import pathlib
 from matplotlib import pyplot as plt
 from matplotlib import colors
 
-from two_phan.sync import Sync
+from Py2P.sync import Sync
 
 pathlib.Path(__file__).parent.resolve()
 

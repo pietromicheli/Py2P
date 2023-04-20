@@ -14,8 +14,8 @@ import warnings
 from math import ceil
 from tqdm import tqdm
 
-from two_phan.core import *
-from two_phan.sync import Sync
+from Py2P.core import *
+from Py2P.sync import Sync
 
 
 TRIALS_C = {
