@@ -781,11 +781,10 @@ class Cell2P:
 class Batch2P:
 
     """
-    A class for perform bartch analysis of multiple recordings 
-    by instantiating multiple Rec2P objects. All the recordings
-    contained by a Batch2P object are assumed to contain the same
-    set of stimuli and trials type, i.e. the structure of the stim_dict
-    contained in each Sync Object must be the same.
+    A class for performing bartch analysis of multiple recordings.
+    All the recordings contained in a Batch2P object must share at 
+    least one stimulation condidition with at least one common trial 
+    type (e.g. CONTRA, BOTH or IPSI)
 
     """
 
@@ -998,7 +997,6 @@ class Batch2P:
         # check lenghts consistency
         all_mean_resp = check_len_consistency(all_mean_resp)
         
-
         # convert to array
         # all_mean_resp = np.array(all_mean_resp)
         x = np.array(all_mean_resp)
@@ -1115,12 +1113,32 @@ class Batch2P:
         return clusters
 
 
-
-
 #############################
 ###---UTILITY FUNCTIONS---###
 #############################
 
+def generate_params_file():
+
+        """
+        Generate a parameters file in the current working dir.
+        This file contains a list of all the parameters that will used for the downsteream analysis,
+        set to a default value.
+        """
+
+        files = os.listdir(os.getcwd())
+
+        if "params.yaml" not in files:
+
+            print("> Config file generated. All parameters set to default.")
+
+            return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
+
+        else:
+
+            print("> Using the parameters file found in data_path.")
+
+            return "params.yaml"
+  
 def filter(s, wn, ord=4, btype="low"):
 
     """
@@ -1131,7 +1149,6 @@ def filter(s, wn, ord=4, btype="low"):
     s_filtered = filtfilt(b, a, s)
 
     return s_filtered
-
 
 def z_norm(s, include_zeros=False):
 
@@ -1158,7 +1175,6 @@ def z_norm(s, include_zeros=False):
         return (s - s_mean) / s_std
 
     return np.zeros(s.shape)
-
 
 def find_optimal_kmeans_k(x):
 
@@ -1209,29 +1225,7 @@ def find_optimal_kmeans_k(x):
     elbow = np.argmax(dcurv)
 
     return round(x_plot[elbow])
-
-def generate_params_file():
-
-        """
-        Generate a parameters file in the current working dir.
-        This file contains a list of all the parameters that will used for the downsteream analysis,
-        set to a default value.
-        """
-
-        files = os.listdir(os.getcwd())
-
-        if "params.yaml" not in files:
-
-            print("> Config file generated. All parameters set to default.")
-
-            return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
-
-        else:
-
-            print("> Using the parameters file found in data_path.")
-
-            return "params.yaml"
-        
+    
 def check_len_consistency(sequences):
 
     """
