@@ -920,7 +920,114 @@ class Batch2P:
                 ids.append(cell)
 
         return ids
+    
+    def _compute_fingerprints_(
+        self,
+        stim_trials_dict = None,
+        type="dff",
+        normalize="z",
+        ):
 
+        """
+        Compute a fingerprint for each cell by concatenating the average responses
+        to the specified stimuli and trials.
+
+        - stim_trials_dict: dict
+            A dict which specifies which stim and which trials to concatenate for computing 
+            the fingerptint.
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            stim name and [t1,...,tn] is a list of valid trials for that stim.
+        """
+
+        # check if the cells have already been retrived
+
+        if self.cells == None:
+
+            self.get_cells()
+
+        if stim_trials_dict == None:
+
+            stim_trials_dict = {stim:[] for stim in self.sync.stims_names}
+
+        responsive = self.get_responsive()
+
+        fingerprints = []
+
+        for cell in responsive:
+
+            average_resp = self.cells[cell].analyzed_trials
+
+            # concatenate the mean responses to all the trials specified by trial_names,
+            # for all the stimuli specified by stim_names.
+
+            concat_stims = []
+
+            for (stim,trials_names) in stim_trials_dict.items():
+
+                if not trials_names:
+
+                    trials_names = list(self.sync.sync_ds[stim].keys())[:-1]
+
+                for trial_name in trials_names:
+
+                    r = average_resp[stim][trial_name]["average_%s"%type]
+
+                    # cut the responses
+                    start = average_resp[stim][trial_name]['window'][0]
+                    stop = average_resp[stim][trial_name]['window'][1]
+
+                    r = r[start:int(stop+start/2)]
+                    # low-pass filter 
+                    r = filter(r,0.3)
+
+                    concat_stims = np.concatenate((concat_stims, r))
+
+            if normalize == "norm":
+
+                concat_stims = (concat_stims - concat_stims.min()) / (concat_stims.max() - concat_stims.min())
+
+            elif normalize == "z":
+
+                concat_stims = z_norm(concat_stims, True)
+
+            fingerprints.append(concat_stims)
+
+        # convert to array
+        fingerprints = np.array(fingerprints)
+
+        ## NB: index consistency between fingerprints array and list from get_responsive() is important here!
+
+        return fingerprints
+
+    def TSNE_embeddings(
+        self,
+        data=None,):
+
+        if len(x)<50:
+                
+            n_comp = len(x)
+
+        else:
+
+            n_comp = 50
+            
+        # run PCA
+        pca = PCA(n_components=n_comp)
+        transformed = pca.fit_transform(x)
+        # run t-SNE
+        tsne = TSNE(n_components=2, 
+                    verbose=0, 
+                    metric='cosine', 
+                    early_exaggeration=4, 
+                    perplexity=10, 
+                    n_iter=2000, 
+                    init='pca', 
+                    angle=0)
+        
+        transformed = tsne.fit_transform(transformed)
+
+        return transformed
+       
     def get_populations(
         self,
         stims_names=None,
