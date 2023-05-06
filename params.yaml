@@ -29,7 +29,7 @@
   qi_threshold : 0.45
 
   # wether to keep only the cells that passed the suite2p classifier
-  use_iscell: 0
+  use_iscell: 1 
 
   # z-score threshold above which spkikes are kept
   spks_threshold : 1.5

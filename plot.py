@@ -35,8 +35,6 @@ def plot_multipleStim(
     average=True,
     stims=None,
     trials=None,
-    save=False,
-    save_path="",
     type="dff",
     full = "dff",
     plot_stim =True,
@@ -45,6 +43,9 @@ def plot_multipleStim(
     share_x=True,
     share_y=True,
     legend=False,
+    save=False,
+    save_path="",
+    save_suffix="",
 ):
 
     """
@@ -52,23 +53,29 @@ def plot_multipleStim(
     If not, plot each cell independently. You can also specify the stimuli and the trial types you
     want to plot.
 
-    -cells: list
+    - cells: list
         list of Cell2P objects
-    -sync: Sync
+    - sync: Sync
         Sync object associated to the cells
-    -average: bool
+    - average: bool
         wether to compute the population average or not
-    -stims_names:
+    - stims_names:
         stimulation conditions for which to plot the average
-    -trials_names:
+    - trials_names:
         trials to plot
-    -type: str
+    - type: str
         can be "dff" or "zspks"
-    -full : str
+    - full : str
         can be "dff" or "zspks", Fraw or Fneu. If None, full trace will not be plotted
-    -order_stims: bool
+    - order_stims: bool
         wether to plot order the stimuli subplots or not. the ordering is based on the name.
     """
+
+    # fix the arguments
+
+    if not isinstance(save_path, list):
+
+        save_path = [save_path]
 
     if stims == None:
 
@@ -78,7 +85,7 @@ def plot_multipleStim(
 
         stims = sorted(stims)
 
-    # convert to list if single elements
+    ## convert to list if single elements
     elif not isinstance(stims, list): 
         
         stims = [stims]
@@ -91,15 +98,16 @@ def plot_multipleStim(
 
         trials = [trials]
 
+
     n_stims = len(stims)
     n_trials = len(trials)
 
-    # decide wheter to plot all the cells or the average
+    ## decide wheter to plot all the cells or the average
     if average:
 
         cells = [cells]
 
-    # if full is specidied, and average==False, add a row to the figure
+    ## if full is specidied, and average==False, add a row to the figure
     add_row = 0
 
     if full != None:
@@ -110,6 +118,7 @@ def plot_multipleStim(
 
         add_row +=1
 
+    # main loop
     for c in cells:
 
         if group_trials:
@@ -149,7 +158,7 @@ def plot_multipleStim(
 
             if group_trials:
 
-                # make sure to use only trials which exist for a specific stim
+                ## make sure to use only trials which exist for a specific stim
                 trials_ = set(trials).intersection(set(sync.sync_ds[stim]))
 
                 # if full:
@@ -194,7 +203,7 @@ def plot_multipleStim(
 
                         i +=1
 
-                    # make sure to use only trials which exist for a specific stim
+                    ## make sure to use only trials which exist for a specific stim
                     if trial in sync.sync_ds[stim]:
 
                         _, ymax, ymin = draw_singleStim(axs_T[i], c, sync, stim, trial, type, legend=legend)
@@ -244,7 +253,7 @@ def plot_multipleStim(
                 except:
                     warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)
 
-                # retrive parameters 
+                ## retrive parameters 
                 cell = c
                 if isinstance(c, list):
                     cell = c[0]
@@ -265,10 +274,7 @@ def plot_multipleStim(
                 axs_T[0].set_title(stim, fontsize=10)
                 axs_T[1].set_title("")
 
-            
-
-
-            # set limits
+            ## set limits
             a = 0 
             e = axs.T[j].size
 
@@ -297,11 +303,17 @@ def plot_multipleStim(
 
             if average:
 
-                plt.savefig("%s\\pop_average_%s.png" %(save_path,type) , bbox_inches="tight")
+                for path in save_path:
+
+                    plt.savefig("%s\\pop_average_%s%s.png" %(path,type,save_suffix), 
+                                bbox_inches="tight")
 
             else:
+
+                for path in save_path:
                 
-                plt.savefig("%s\\ROI_#%d.png" %(save_path,c.idx) , bbox_inches="tight")
+                    plt.savefig("%s\\ROI_#%d_%s%s.png" %(path,c.idx,type,save_suffix),
+                                bbox_inches="tight")
 
             plt.close(fig)
 
@@ -319,15 +331,15 @@ def draw_singleStim(
     """
     Plot average response calculated across all the specified cells .
 
-    -cells: 
+    - cells: 
         cell to plot. if a list of Cell2P object is passed, plot the mean. 
-    -sync: Sync
+    - sync: Sync
         Sync object associated to the cells
-    -stim:
+    - stim:
         stimulation condition for which to plot the average
-    -trials:
+    - trials:
         trials to plot, can be str or list of str. If None, use all the possible trials 
-    -type: str
+    - type: str
         can be "dff", "spks", "zspks" 
     """
 
@@ -450,7 +462,8 @@ def draw_full(
     cells,
     sync: Sync,
     type="dff",
-    stim=None):
+    stim=None,
+    x_scale='sec'):
 
     """
     Plot full length traces for all cells. If stim is specified, plot full trace
@@ -480,7 +493,8 @@ def draw_full(
     if stim != None:
 
         r = r[sync.sync_ds[stim]["stim_window"][0]:
-                               sync.sync_ds[stim]["stim_window"][1]]
+              (sync.sync_ds[stim]["stim_window"][1]+
+              cell.params["baseline_frames"])]
 
         stims = [stim]
         offset = sync.sync_ds[stim]["stim_window"][0]
@@ -490,7 +504,19 @@ def draw_full(
         stims = sync.sync_ds
         offset = 0
 
-    x = np.arange(len(r)) / cell.params["fr"]
+    
+    if x_scale=='sec':
+
+        ax.set_xlabel("time (s)")
+        xscale = cell.params["fr"]
+
+    elif x_scale=='frames':
+
+        ax.set_xlabel("frames")
+        xscale = 1
+
+    x = np.arange(len(r))/xscale
+
 
     ax.set_title(type)
 
@@ -514,7 +540,7 @@ def draw_full(
 
             for i,trial in enumerate(sync.sync_ds[stim][trial_type]["trials"]):
 
-                ax.axvspan(int((trial[0]-offset)/cell.params["fr"]), int((trial[1]-offset)/ cell.params["fr"]),
+                ax.axvspan(int((trial[0]-offset)/xscale), int((trial[1]-offset)/xscale),
                                 color=c, alpha=0.2, label="_"*i+"%s -%s"%(stim,trial_type))
                 
     ymax = r.max()
@@ -533,11 +559,11 @@ def plot_FOV(
     Plot mean image of the FOV with masks of the passed cells.
     If cells_idxs is list of lists, each sublist will be considered as a population.
 
-    -cells: list 
+    - cells: list 
         list or list of lists of Cell2P objects.
-    -rec: Rec2P
+    - rec: Rec2P
         Rec2P object from which the cells have been extracted.
-    -k: int
+    - k: int
         value to scale the image luminanca
 
     '''
@@ -593,17 +619,17 @@ def plot_averages_heatmap(
     """
     Plot heatmap for all the cells.
 
-    -cells: list
+    - cells: list
         list of Cell2P objects
-    -sync: Sync
+    - sync: Sync
         Sync object for plotting stimjulation windows
-    -stims: list
+    - stims: list
         list of stimuli names to plot
-    -trials: list
+    - trials: list
         list of trials names to plot
-    -type: str
+    - type: str
         can be "dff" or "zspks"
-    -full: str
+    - full: str
         can be Fraw,dff,spks or zspks. if specified, stims,trials and type
         argoument will be ignored
     """
@@ -758,9 +784,9 @@ def plot_histogram(
     Plot distribution of the data contained in values array.
     If values is a matrix, histograms will be computed on the axis 1 (coulumns).
 
-    -values: dict
+    - values: dict
         dict containing stim:[rmis] items that will be used for plotting the histograms.
-    -control values: dict
+    - control values: dict
         dict containing stim:[rmis] items that will be used for plotting the control histograms.
 
     """

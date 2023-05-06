@@ -97,7 +97,8 @@ class Sync:
 
                 i += 2
 
-            stim_end = self.sync_frames[i - 1]
+            stim_end = (self.sync_frames[i - 1]+
+                        sync_ds[stim][self.trials_names[trial]]["pause_len"])
 
             sync_ds[stim] |= {"stim_window": (stim_start, stim_end)}
 
