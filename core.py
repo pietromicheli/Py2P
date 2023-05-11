@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from scipy.signal import butter, filtfilt
 from scipy.optimize import curve_fit
 from scipy.integrate import trapz
@@ -235,7 +236,7 @@ class Rec2P:
         - type: str
             can be either "dff" or "zspks"
         - normalize: str
-            'norm': signals will be normalized between 0 and 1 before running PCA
+            'lin': signals will be normalized between 0 and 1 before running PCA
             'z': signals will be normalized using z score normalization before running PCA
             otherwise, no normalization will be applied
 
@@ -284,9 +285,9 @@ class Rec2P:
 
                     concat_stims = np.concatenate((concat_stims, r))
 
-            if normalize == "norm":
+            if normalize == "lin":
 
-                concat_stims = (concat_stims - concat_stims.min()) / (concat_stims.max() - concat_stims.min())
+                concat_stims = lin_norm(concat_stims)
 
             elif normalize == "z":
 
@@ -847,13 +848,13 @@ class Batch2P:
                 trials_intersection.intersection(set(list(sync.sync_ds[stim].keys())[:-1]))
 
             self.stims_trials_intersection |= {stim:list(trials_intersection)}
-
-        
+    
         # generate params.yaml
         generate_params_file()
 
         # instantiate the Rec2P objects
         self.recs = {}
+        self.groups = groups
 
         for rec_id, (data_path, sync) in enumerate(data_dict.items()):
 
@@ -921,9 +922,9 @@ class Batch2P:
 
         return ids
     
-    def _compute_fingerprints_(
+    def compute_fingerprints(
         self,
-        stim_trials_dict = None,
+        stim_trials_dict=None,
         type="dff",
         normalize="z",
         ):
@@ -947,7 +948,7 @@ class Batch2P:
 
         if stim_trials_dict == None:
 
-            stim_trials_dict = {stim:[] for stim in self.sync.stims_names}
+            stim_trials_dict = {stim:[] for stim in self.stims_trials_intersection}
 
         responsive = self.get_responsive()
 
@@ -966,7 +967,7 @@ class Batch2P:
 
                 if not trials_names:
 
-                    trials_names = list(self.sync.sync_ds[stim].keys())[:-1]
+                    trials_names = list(self.stims_trials_intersection[stim])
 
                 for trial_name in trials_names:
 
@@ -978,13 +979,13 @@ class Batch2P:
 
                     r = r[start:int(stop+start/2)]
                     # low-pass filter 
-                    r = filter(r,0.3)
+                    r = filter(r,0.2)
 
                     concat_stims = np.concatenate((concat_stims, r))
 
-            if normalize == "norm":
+            if normalize == "lin":
 
-                concat_stims = (concat_stims - concat_stims.min()) / (concat_stims.max() - concat_stims.min())
+                concat_stims = lin_norm(concat_stims,-1,1)
 
             elif normalize == "z":
 
@@ -992,154 +993,110 @@ class Batch2P:
 
             fingerprints.append(concat_stims)
 
+        # check lenghts consistency
+        fingerprints = check_len_consistency(fingerprints)
+
         # convert to array
         fingerprints = np.array(fingerprints)
+        # x = np.array(fingerprints)
 
         ## NB: index consistency between fingerprints array and list from get_responsive() is important here!
 
         return fingerprints
 
-    def TSNE_embeddings(
+    def TSNE_embedding(
         self,
-        data=None,):
+        data=None,
+        **kwargs
+        ):
 
-        if len(x)<50:
-                
-            n_comp = len(x)
-
+        if len(data)<50:           
+            n_comp = len(data)
         else:
-
             n_comp = 50
-            
+        
+        if kwargs:
+            tsne_params = kwargs
+        else: 
+            tsne_params = {
+                'n_components':2, 
+                'verbose':1, 
+                'metric':'cosine', 
+                'early_exaggeration':4, 
+                'perplexity':15, 
+                'n_iter':2000, 
+                'init':'pca', 
+                'angle':0.1}
         # run PCA
         pca = PCA(n_components=n_comp)
-        transformed = pca.fit_transform(x)
+        transformed = pca.fit_transform(data)
         # run t-SNE
-        tsne = TSNE(n_components=2, 
-                    verbose=0, 
-                    metric='cosine', 
-                    early_exaggeration=4, 
-                    perplexity=10, 
-                    n_iter=2000, 
-                    init='pca', 
-                    angle=0)
+        tsne = TSNE(**tsne_params)
         
         transformed = tsne.fit_transform(transformed)
 
         return transformed
-       
+    
+    def k_means(
+        self,
+        data,
+        n_clusters
+    ):
+
+        # run Kmeans
+        kmeans = KMeans(n_clusters=n_clusters, 
+                        init="k-means++",
+                        algorithm="auto").fit(data)
+        
+        return kmeans.labels_
+    
+    def GMM( 
+        self,
+        data,
+        **kwargs
+    ):
+        
+        # run Gaussian Mixture Model
+        gm_labels = BayesianGaussianMixture(**kwargs).fit_predict(data)
+        
+        return gm_labels
+    
     def get_populations(
         self,
-        stims_names=None,
-        trials_names=None,
+        stim_trials_dict=None,
         n_clusters=None,
         use_tsne=False,
         type="dff",
-        normalize="norm",
+        normalize="lin",
         plot=True,
         ):
 
         """
-        Clusterize the activity traces of all the cells into population using PCA and K-means.
+        Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
 
-        - stims_names: list
-            The stimulation conditions to use for extracting the response feature of each cell.
-            By default the respopnses to all the stimuli will be used.
-        - trials_names: list
-            The responses to the specified trials will be concatenated and used as features for
-            th PCA, for all the stimuli specified by stims_names.
-            By default the respopnses to all the trial types will be used.
-        - n_clusters: int
+        - stim_trials_dict: dict
+            A dict which specifies which stim and which trials to concatenate for computing 
+            the fingerptint.
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            stim name and [t1,...,tn] is a list of valid trials for that stim.
+       - n_clusters: int
             Number of cluster to use for k means clustering
         - use_tsne: bool
             wether to compute tsne embedding after PCA decomposition
         - type: str
             can be either "dff" or "zspks"
         - normalize: str
-            'norm': signals will be normalized between 0 and 1 before running PCA
+            'lin': signals will be normalized between 0 and 1 before running PCA
             'z': signals will be normalized using z score normalization before running PCA
             otherwise, no normalization will be applied
 
         """
-        ### TO DO: SPLIT THIS FUNCTION IN:
-        ### _compute fingerprints_(), PCA_embedding(), TSNE_embedding(), kmeans()
-
-
-        # check if the cells have already been retrived
-        if self.cells == None:
-
-            self.get_cells()
-
-        all_mean_resp = []
-
-        if stims_names == None:
-
-            stims_names = list(self.stims_trials_intersection.keys())
-
         responsive = self.get_responsive()
 
-        for cell in responsive:
+        # compute fingerprints
+        x = self.compute_fingerprints(stim_trials_dict,type,normalize)
 
-            average_resp = self.cells[cell].analyzed_trials
-
-            # concatenate the mean responses to all the trials specified by trial_names,
-            # for all the stimuli specified by stim_names.
-
-            concat_stims = []
-
-            for stim in stims_names:
-
-                # check if specified stims are in stims_trials_intersection
-                if stim not in self.stims_trials_intersection:
-
-                    warnings.warn("WARNING: stimulus '%s' is not shared by all the recordings,so itwill be skipped"%stim, 
-                                  RuntimeWarning)
-                    
-                    break
-
-                if trials_names == None:
-
-                    trials_names = self.stims_trials_intersection[stim]
-
-                for trial_name in trials_names:
-
-                    # check if specified trial names are in stims_trials_intersection, for each stimuli
-                    if trial_name not in self.stims_trials_intersection[stim]:
-
-                        warnings.warn("WARNING: trial '%s' is not shared by stimulus '%s' all the recordings,so it will be skipped"%(stim,trial_name), 
-                                      RuntimeWarning)
-
-                    r = average_resp[stim][trial_name]["average_" + type]
-
-                    # cut the responses
-                    start = average_resp[stim][trial_name]['window'][0]
-                    stop = average_resp[stim][trial_name]['window'][1]
-
-                    r = r[start:int(stop+start/2)]
-                    # low-pass filter 
-                    r = filter(r,0.3)
-
-                    concat_stims = np.concatenate((concat_stims, r))
-                    
-            if normalize == "norm":
-
-                concat_stims = (concat_stims - concat_stims.min()) / (concat_stims.max() - concat_stims.min())
-
-            elif normalize == "z":
-
-                concat_stims = z_norm(concat_stims, True)
-
-            all_mean_resp.append(concat_stims)
-
-        # check lenghts consistency
-        all_mean_resp = check_len_consistency(all_mean_resp)
-        
-        # convert to array
-        # all_mean_resp = np.array(all_mean_resp)
-        x = np.array(all_mean_resp)
-
-        # run PCA and tSNE if desired
-
+        # embed data
         if use_tsne:
 
             if len(x)<50:
@@ -1150,21 +1107,12 @@ class Batch2P:
             # run PCA
             pca = PCA(n_components=n_comp)
             transformed = pca.fit_transform(x)
-            # run t-SNE
-            tsne = TSNE(n_components=2, 
-                        verbose=1, 
-                        metric='cosine', 
-                        early_exaggeration=4, 
-                        perplexity=15, 
-                        n_iter=2000, 
-                        init='pca', 
-                        angle=0.1)
-            
-            transformed = tsne.fit_transform(transformed)
+            # run t-SNE 
+            transformed = self.TSNE_embedding(x)
         
         else:
 
-            # run PCA
+            # PCA embedding
             pca = PCA(n_components=50)
             transformed = pca.fit_transform(x)
 
@@ -1341,6 +1289,13 @@ def z_norm(s, include_zeros=False):
         return (s - s_mean) / s_std
 
     return np.zeros(s.shape)
+
+def lin_norm(s, lb=0, ub=1):
+
+    """
+    Compute linear normalization between lb and ub on input signal s
+    """
+    return (ub-lb)*((s - s.min()) / (s.max() - s.min()))+lb
 
 def find_optimal_kmeans_k(x):
 

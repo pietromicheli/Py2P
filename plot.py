@@ -4,8 +4,9 @@ import random
 import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib import colors
-from matplotlib import cm
+from matplotlib import cm,patches
 from scipy.stats import sem
 from scipy.integrate import trapz
 from scipy.special import sinc
@@ -774,6 +775,85 @@ def plot_averages_heatmap(
         [ax.axvline(x, color="k") for x in stim_frames]
 
         return ax
+
+def plot_clusters(
+    data,
+    labels,
+    markers=None,
+    algo='',
+    l1loc='upper right',
+    l2loc='upper left',
+
+):
+    
+    """
+    Plot scatterplot of data. 
+    Each datapoint will be color coded according to label array, and the marker will be
+    assign accoding to the marker_criteria.
+
+    - data: Array-like
+        datapoints to be plotted. Only first 2 dimensions will be plotted
+    - labels: Array-like
+        labels array specifying the clusters
+    - markers: Array-like
+        markers array specifying same values for datapoints you want to draw using the
+        same marker.
+    - algo: str
+        name of the embedding algorithm
+    """
+
+    clist = np.array(list(plt.colormaps['tab20'].colors))
+    allmarkers = list(Line2D.markers.items())[2:] 
+    # random.shuffle(allmarkers)
+    # random.shuffle(clist)
+
+    Xax = data[:, 0]
+    Yax = data[:, 1]
+
+    fig = plt.figure(figsize=(7, 5))
+    ax = fig.add_subplot(111)
+
+    fig.patch.set_facecolor("white")
+
+    scatters= []
+    for m in np.unique(markers):
+
+        marker = allmarkers[m][0]
+        ix = np.where(markers == m)[0]
+
+        s = ax.scatter(
+            Xax[ix], Yax[ix], 
+            edgecolors=clist[labels[ix]],
+            facecolors=clist[labels[ix]],
+            s=50, 
+            marker=marker,
+            alpha=0.2,
+        )
+
+        scatters.append(s)
+
+    p = []
+    l = []
+    for i,c in enumerate(clist[np.unique(labels)]):
+
+        p.append(patches.Rectangle((0,0),1,1,fc=c))
+        l.append("POP %d"%i)
+
+    legend1 = ax.legend(p,
+                        l,
+                        loc=l1loc)
+
+    legend2 = ax.legend((s for s in scatters),
+                        ('Group %d'%i for i in range(len(scatters))),
+                        loc=l2loc)
+    
+    ax.add_artist(legend1)
+    ax.add_artist(legend2)
+
+    ax.set_xlabel("%s 1"%algo, fontsize=9)
+    ax.set_ylabel("%s 2"%algo, fontsize=9)
+
+    ax.set_title("%d ROIs"%(len(Xax)))
 
 def plot_histogram(
     values:dict, 
