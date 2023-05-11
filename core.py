@@ -795,7 +795,7 @@ class Cell2P:
 class Batch2P:
 
     """
-    A class for performing bartch analysis of multiple recordings.
+    Class for performing bartch analysis of multiple recordings.
     All the recordings contained in a Batch2P object must share at 
     least one stimulation condidition with at least one common trial 
     type (e.g. CONTRA, BOTH or IPSI)

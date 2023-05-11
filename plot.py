@@ -1,6 +1,5 @@
 import os
 import shutil
-import random
 import numpy as np
 import seaborn as sns
 from matplotlib import pyplot as plt
