@@ -36,6 +36,7 @@ def plot_multipleStim(
     stims=None,
     trials=None,
     type="dff",
+    func_=None,
     full = "dff",
     plot_stim =True,
     order_stims=True,
@@ -69,6 +70,10 @@ def plot_multipleStim(
         can be "dff" or "zspks", Fraw or Fneu. If None, full trace will not be plotted
     - order_stims: bool
         wether to plot order the stimuli subplots or not. the ordering is based on the name.
+    - func_: tuple
+        function that will be applied to each signal. first argoument of the function is 
+        is assumed to be the signal. Should be in the form:
+        (func,**kwards) where kwards should not contain first argoument (signal)
     """
 
     # fix the arguments
@@ -141,7 +146,7 @@ def plot_multipleStim(
 
         else:
             
-            fig.suptitle("ROI #%d"%c.idx)
+            fig.suptitle("ROI #%s   QI:%.2f"%(c.idx,c.qi))
 
 
         if not isinstance(axs, np.ndarray):
@@ -161,11 +166,11 @@ def plot_multipleStim(
                 ## make sure to use only trials which exist for a specific stim
                 trials_ = set(trials).intersection(set(sync.sync_ds[stim]))
 
-                # if full:
+                if full:
 
-                #     axs_ = axs[0]
+                    axs_ = axs[0]
 
-                if plot_stim:
+                elif plot_stim:
 
                     axs_= axs[1]
 
@@ -177,7 +182,7 @@ def plot_multipleStim(
 
                     axs_ = axs_[j]
                                  
-                _, ymax, ymin = draw_singleStim(axs_, c, sync, stim, trials_, type, legend=legend)
+                _, ymax, ymin = draw_singleStim(axs_, c, sync, stim, trials_, type, func_=func_, legend=legend)
 
                 if ymax > y_max: y_max = ymax
 
@@ -206,7 +211,7 @@ def plot_multipleStim(
                     ## make sure to use only trials which exist for a specific stim
                     if trial in sync.sync_ds[stim]:
 
-                        _, ymax, ymin = draw_singleStim(axs_T[i], c, sync, stim, trial, type, legend=legend)
+                        _, ymax, ymin = draw_singleStim(axs_T[i], c, sync, stim, trial, type, func_=func_, legend=legend)
 
                         # if j>0: axs_T[i].set_ylabel("")
 
@@ -250,42 +255,47 @@ def plot_multipleStim(
 
                 try:
                     func = globals()['draw_%s_stim'%stim]
+                    ## retrive parameters 
+                    cell = c
+                    if isinstance(c, list):
+                        cell = c[0]
+
+                    fr = cell.params["fr"]
+                    pad_l = cell.params["baseline_frames"]
+
+                    stim_len = 0
+                    for ax in axs_T[1:]:
+
+                        if ax.lines:
+
+                            stim_len = ax.lines[0].get_xdata().size
+                            break                
+
+                    func(axs_T[0], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
+                
+                    axs_T[0].set_title(stim, fontsize=10)
+                    axs_T[1].set_title("")   
                 except:
-                    warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)
-
-                ## retrive parameters 
-                cell = c
-                if isinstance(c, list):
-                    cell = c[0]
-
-                fr = cell.params["fr"]
-                pad_l = cell.params["baseline_frames"]
-
-                stim_len = 0
-                for ax in axs_T[1:]:
-
-                    if ax.lines:
-
-                        stim_len = ax.lines[0].get_xdata().size
-                        break                
-
-                func(axs_T[0], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
-            
-                axs_T[0].set_title(stim, fontsize=10)
-                axs_T[1].set_title("")
+                    warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)                                            
 
             ## set limits
-            a = 0 
-            e = axs.T[j].size
+            # s = 0          
+            # e = axs.T[j].size
 
-            if plot_stim: e = n_stims
+            # if plot_stim: e = n_stims
 
-            if full: e = -1
+            # if full: 
+            e = -1
 
-            if plot_stim: a = 1
+            if plot_stim: s = 1
+            else: s = 0
             
+            if isinstance(axs.T[j], np.ndarray):
+                axs_ = axs.T[j]
+            else:
+                axs_ = axs.T
 
-            for ax in axs.T[j].flatten()[a:e]:
+            for ax in axs_.flatten()[s:e]:
 
                 ax.set_ylim(y_min, y_max)
 
@@ -312,7 +322,7 @@ def plot_multipleStim(
 
                 for path in save_path:
                 
-                    plt.savefig("%s\\ROI_#%d_%s%s.png" %(path,c.idx,type,save_suffix),
+                    plt.savefig("%s\\ROI_#%s_%s%s.png" %(path,c.idx,type,save_suffix),
                                 bbox_inches="tight")
 
             plt.close(fig)
@@ -325,7 +335,8 @@ def draw_singleStim(
     trials: None,
     type="dff",
     stim_window = True,
-    legend = False
+    legend = False,
+    func_ = None
 ):
 
     """
@@ -341,6 +352,10 @@ def draw_singleStim(
         trials to plot, can be str or list of str. If None, use all the possible trials 
     - type: str
         can be "dff", "spks", "zspks" 
+    - func: dict
+        function that will be applied to each signal. first argoument of the function is 
+        is assumed to be the signal. Should be in the form:
+        (func,**kwards) where kwards should not contain first argoument (signal)
     """
 
     # invert trials dict
@@ -396,6 +411,10 @@ def draw_singleStim(
 
             r = cells.analyzed_trials[stim][trial]["average_" + type]
             error = cells.analyzed_trials[stim][trial]["std_" + type]
+
+        if func_!=None:
+
+            r = func_[0](r,func_[1])
 
         if (r + error).max() > ymax:
 
@@ -782,6 +801,7 @@ def plot_clusters(
     algo='',
     l1loc='upper right',
     l2loc='upper left',
+    save=None
 
 ):
     
@@ -805,6 +825,10 @@ def plot_clusters(
     allmarkers = list(Line2D.markers.items())[2:] 
     # random.shuffle(allmarkers)
     # random.shuffle(clist)
+
+    if markers==None:
+
+        markers= np.zeros(len(data),int).tolist()
 
     Xax = data[:, 0]
     Yax = data[:, 1]
@@ -840,19 +864,25 @@ def plot_clusters(
 
     legend1 = ax.legend(p,
                         l,
-                        loc=l1loc)
-
-    legend2 = ax.legend((s for s in scatters),
-                        ('Group %d'%i for i in range(len(scatters))),
-                        loc=l2loc)
-    
+                        loc=l1loc,
+                        bbox_to_anchor=(1.04, 1))
     ax.add_artist(legend1)
-    ax.add_artist(legend2)
+    
+    if not markers==None:
+
+        legend2 = ax.legend((s for s in scatters),
+                            ('Group %d'%i for i in range(len(scatters))),
+                            loc=l2loc)
+        ax.add_artist(legend2)
 
     ax.set_xlabel("%s 1"%algo, fontsize=9)
     ax.set_ylabel("%s 2"%algo, fontsize=9)
 
     ax.set_title("%d ROIs"%(len(Xax)))
+
+    if save!=None:
+
+        plt.savefig(save, bbox_inches='tight', bbox_extra_artists=(legend1,))
 
 def plot_histogram(
     values:dict, 
