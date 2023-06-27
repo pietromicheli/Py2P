@@ -290,12 +290,9 @@ def plot_multipleStim(
                 ax.set_ylim(y_min, y_max)
 
         if share_y:
-
             plt.subplots_adjust(wspace=0.01)
 
-
         if share_x:
-
             plt.subplots_adjust( hspace=0.01)
             
 
@@ -854,6 +851,84 @@ def plot_clusters(
 
     ax.set_title("%d ROIs"%(len(Xax)))
 
+def plot_sparse_noise(
+        cells,
+        texture_dim:tuple,
+        pre_trial:int,
+        freq=4,
+        sr = 15.5,
+        save_path=''
+):
+    
+    """
+    Plot sparse noise responses for each cell, overlying ON and OFF responses
+    for each grid location.
+
+    - cells: list of Cell2P
+        cells to be plotted
+    - texture_dim: tuple
+        tuple specifying the dimension of the texture matrix used for sparse noise stim
+    - pre_trials: int
+        number of frames before the trial onset included when extracting each trial response
+    - freq: int
+        frequency of the sparse noise stim
+    - sr: int
+        sample rate of the recording
+    - save_path: str
+        path ehre to save the plot
+
+    """
+
+    for cell in cells:
+
+        fig, axs = plt.subplots(texture_dim[0],texture_dim[1],sharex=False,sharey=False)
+
+        if 'sparse_noise' not in cell.analyzed_trials:
+
+            warnings.warn("No Sparse Noise stim found for cell %s !"%cell.id, RuntimeWarning)
+            continue
+        
+        ymax = 0
+        ymin = 0
+        for trial in cell.analyzed_trials['sparse_noise']:
+
+            row = int(trial.split(sep='_')[0])
+            col = int(trial.split(sep='_')[1])
+            type = trial.split(sep='_')[2]
+
+            r = cell.analyzed_trials['sparse_noise'][trial]['average_dff']
+            std = cell.analyzed_trials['sparse_noise'][trial]['std_dff']
+            x = np.arange(len(r))
+
+            if type=='white':
+                c = 'r'
+            elif type=='black':
+                c = 'k'
+
+            
+            axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c)
+            axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
+            axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
+
+            if (row+col)==0:
+                axs[row,col].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
+
+            else:
+                axs[row,col].set_xticks([])
+                axs[row,col].set_yticks([])
+
+            if (r+std).max()>ymax: ymax = (r+std).max()
+            if (r-std).min()<ymin: ymin = (r-std).min()
+
+
+        plt.setp(axs, ylim=(ymin+(ymin/5),ymax+(ymax/5)))
+        plt.subplots_adjust(wspace=0.04)
+        plt.subplots_adjust(hspace=0.04)
+    
+        plt.savefig(r'%s/%s.png'%(save_path,cell.id))
+        plt.close(fig)
+
+    
 def plot_histogram(
     values:dict, 
     control_values=None,

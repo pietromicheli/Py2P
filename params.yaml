@@ -12,6 +12,9 @@
   # number of frames to use for extracting the baseline activity.
   baseline_frames : 40
 
+  # number of frames before trial onset that will be included when extractin the trial window
+  pre_trial : 40
+  
   # how to extract the baseline activity for computing df/f for each trial:
   # 0: extract the baseline for each trial independentely 
   # 1: extract the baseline only at the beginning of each stimulation condition

@@ -11,6 +11,7 @@ from scipy.optimize import curve_fit
 from scipy.integrate import trapz
 import yaml
 import warnings
+import time
 from tqdm import tqdm
 import pathlib
 from matplotlib import pyplot as plt
@@ -21,7 +22,7 @@ from Py2P.sync import Sync
 
 pathlib.Path(__file__).parent.resolve()
 
-CONFIG_FILE_TEMPLATE = "%s\\params.yaml" % pathlib.Path(__file__).parent.resolve()
+CONFIG_FILE_TEMPLATE = r"%s/params.yaml" % pathlib.Path(__file__).parent.resolve()
 
 DEFAULT_PARAMS = {}
 
@@ -68,12 +69,12 @@ class Rec2P:
         print("\n> loading data from %s ..." % data_path, end=" ")
 
         self.data_path = data_path
-        self.Fraw = np.load(data_path + "\\F.npy")
-        self.Fneu = np.load(data_path + "\\Fneu.npy")
-        self.iscell = np.load(data_path + "\\iscell.npy")
-        self.spks = np.load(data_path + "\\spks.npy")
-        self.stat = np.load(data_path + "\\stat.npy", allow_pickle=True)
-        self.ops = np.load(data_path + "\\ops.npy", allow_pickle=True)
+        self.Fraw = np.load(data_path + r"/F.npy")
+        self.Fneu = np.load(data_path + r"/Fneu.npy")
+        self.iscell = np.load(data_path + r"/iscell.npy")
+        self.spks = np.load(data_path + r"/spks.npy")
+        self.stat = np.load(data_path + r"/stat.npy", allow_pickle=True)
+        self.ops = np.load(data_path + r"/ops.npy", allow_pickle=True)
 
         print("OK")
 
@@ -154,24 +155,23 @@ class Rec2P:
         responsive = []
 
         if n == None:
-
             n_cells = self.get_ncells()
 
-        else:
+            if self.params["use_iscell"]:
+                 n_cells = int(np.sum(self.iscell[:,0]))
 
+        else:
             n_cells = n
 
         for id in tqdm(range(n_cells)):
 
             if self.params["use_iscell"]:
-
                 # check the ROIS has been classified as cell by suite2p
                 if not self.iscell[id][0]:
                     continue
 
             cell = Cell2P(self, id)
-
-            cell.analyze_trials()
+            cell.analyze()
 
             if not keep_unresponsive and not cell.responsive:
 
@@ -432,16 +432,16 @@ class Cell2P:
     
     """
 
-    def __init__(self, rec: Rec2P, idx: int):
+    def __init__(self, rec: Rec2P, id: int):
 
-        self.idx = idx
+        self.id = id
         self.responsive = None
         self.analyzed_trials = None
 
         # reference data from rec object
-        self.Fraw = rec.Fraw[idx]
-        self.Fneu = rec.Fraw[idx]
-        self.spks = rec.spks[idx]
+        self.Fraw = rec.Fraw[id]
+        self.Fneu = rec.Fraw[id]
+        self.spks = rec.spks[id]
         self.params = rec.params
 
         # refrence usefull sync attibutes
@@ -464,9 +464,9 @@ class Cell2P:
                     ][1]
                 ]
             )
-            dff = (self.FrawCorr - self.mean_baseline) / self.mean_baseline
+            self.dff = (self.FrawCorr - self.mean_baseline) / self.mean_baseline
 
-            dff_baseline = dff[
+            self.dff_baseline = self.dff[
                 self.params["baseline_indices"][0] : self.params["baseline_indices"][1]
             ]
 
@@ -478,10 +478,10 @@ class Cell2P:
 
             self.dff_baseline = self.dff[: rec.sync.sync_frames[0]]
 
-        # low-pass filter dff
-        # self.dff = filter(self.dff, self.params["lowpass_wn"])
-
-        # self.dff_baseline = filter(self.dff_baseline, self.params["lowpass_wn"])
+        # z-score and filter spikes
+        self.zspks = np.where(
+                        abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
+                    )
 
     def _compute_QI_(self, trials: np.ndarray):
 
@@ -529,7 +529,7 @@ class Cell2P:
 
         return snr_a/snr_b,snr_a,snr_b
 
-    def analyze_trials(self):
+    def analyze(self):
 
         """
         Compute average responses (df/f and z-scored spkiking activity)
@@ -598,32 +598,28 @@ class Cell2P:
 
                     resp = self.FrawCorr[
                         trial[0]
-                        - self.params["baseline_frames"] : trial[0]
+                        - self.params["pre_trial"] : trial[0]
                         + trial_len
                         + pause_len
                     ]
 
                     resp_dff = (resp - mean_baseline) / mean_baseline
-
-                    # smooth with lp filter
-                    # resp_dff = filter(resp_dff, self.params["lowpass_wn"])
-
                     trials_dff.append(resp_dff)
 
-                    # calculate z-scored spiking activity
+                    # spiking activity
                     resp_spks = self.spks[
                         trial[0]
-                        - self.params["baseline_frames"] : trial[0]
+                        - self.params["pre_trial"] : trial[0]
                         + trial_len
                         + pause_len
                     ]
-
-                    resp_zspks = z_norm(resp_spks)
-
-                    # threshold z-scored spiking activity
-                    resp_zspks = np.where(
-                        abs(resp_zspks) < self.params["spks_threshold"], 0, resp_zspks
-                    )
+                    # z-scored spiking activity
+                    resp_zspks = self.zspks[
+                        trial[0]
+                        - self.params["pre_trial"] : trial[0]
+                        + trial_len
+                        + pause_len
+                    ]
 
                     trials_spks.append(resp_spks)
                     trials_zspks.append(resp_zspks)
@@ -634,10 +630,12 @@ class Cell2P:
                 trials_zspks = np.array(trials_zspks)
 
                 # calculate QI over df/f traces
-                qi = self._compute_QI_(filter(trials_dff, 0.3))
 
-                on = self.params["baseline_frames"]
-                off = self.params["baseline_frames"] + trial_len
+                # qi = self._compute_QI_(filter(trials_dff, 0.3))
+                qi = 0
+
+                on = self.params["pre_trial"]
+                off = self.params["pre_trial"] + trial_len
 
                 analyzed_trials[stim] |= {
                     trial_type: {
@@ -645,8 +643,9 @@ class Cell2P:
                         "average_dff": np.mean(trials_dff, axis=0),
                         "std_dff": np.std(trials_dff, axis=0),
                         "average_spks": np.mean(trials_spks, axis=0),
+                        "std_spks": np.std(trials_spks, axis=0),
                         "average_zspks": np.mean(trials_zspks, axis=0),
-                        "std_zspks": np.std(trials_spks, axis=0),
+                        "std_zspks": np.std(trials_zspks, axis=0),
                         "QI": qi,
                         "window": (on, off),
                     }
@@ -711,7 +710,7 @@ class Cell2P:
 
         if not self.analyzed_trials:
 
-            self.analyze_trials()
+            self.analyze()
 
         average_resp_1 = self.analyzed_trials[stim][trial_name_1]["average_dff"]
         average_resp_2 = self.analyzed_trials[stim][trial_name_2]["average_dff"]
@@ -795,7 +794,7 @@ class Cell2P:
 class Batch2P:
 
     """
-    Class for performing bartch analysis of multiple recordings.
+    Class for performing batch analysis of multiple recordings.
     All the recordings contained in a Batch2P object must share at 
     least one stimulation condidition with at least one common trial 
     type (e.g. CONTRA, BOTH or IPSI)
