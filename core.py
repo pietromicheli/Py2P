@@ -11,7 +11,6 @@ from scipy.optimize import curve_fit
 from scipy.integrate import trapz
 import yaml
 import warnings
-import time
 from tqdm import tqdm
 import pathlib
 from matplotlib import pyplot as plt
