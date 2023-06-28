@@ -23,7 +23,6 @@ from Py2P.sync import Sync
 pathlib.Path(__file__).parent.resolve()
 
 CONFIG_FILE_TEMPLATE = r"%s/params.yaml" % pathlib.Path(__file__).parent.resolve()
-
 DEFAULT_PARAMS = {}
 
 ########################
@@ -69,6 +68,12 @@ class Rec2P:
         print("\n> loading data from %s ..." % data_path, end=" ")
 
         self.data_path = data_path
+        self.Fraw = np.load(data_path + r"/F.npy")
+        self.Fneu = np.load(data_path + r"/Fneu.npy")
+        self.iscell = np.load(data_path + r"/iscell.npy")
+        self.spks = np.load(data_path + r"/spks.npy")
+        self.stat = np.load(data_path + r"/stat.npy", allow_pickle=True)
+        self.ops = np.load(data_path + r"/ops.npy", allow_pickle=True)
         self.Fraw = np.load(data_path + r"/F.npy")
         self.Fneu = np.load(data_path + r"/Fneu.npy")
         self.iscell = np.load(data_path + r"/iscell.npy")
@@ -470,7 +475,7 @@ class Cell2P:
 
     def __init__(self, rec: Rec2P, id: int):
 
-        self.id = id
+        self.idx = id
         self.responsive = None
         self.analyzed_trials = None
 
@@ -500,6 +505,7 @@ class Cell2P:
                     ][1]
                 ]
             )
+
             self.dff = (self.FrawCorr - self.mean_baseline) / self.mean_baseline
 
             self.dff_baseline = self.dff[
@@ -514,6 +520,10 @@ class Cell2P:
 
             self.dff_baseline = self.dff[: rec.sync.sync_frames[0]]
 
+        # z-score and filter spikes
+        self.zspks = np.where(
+                        abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
+                    )
         # z-score and filter spikes
         self.zspks = np.where(
                         abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
@@ -636,6 +646,7 @@ class Cell2P:
                     resp = self.FrawCorr[
                         trial[0]
                         - self.params["pre_trial"] : trial[0]
+                        - self.params["pre_trial"] : trial[0]
                         + trial_len
                         + pause_len
                     ]
@@ -650,6 +661,7 @@ class Cell2P:
                         + trial_len
                         + pause_len
                     ]
+
                     # z-scored spiking activity
                     resp_zspks = self.zspks[
                         trial[0]
@@ -670,6 +682,9 @@ class Cell2P:
 
                 # qi = self._compute_QI_(filter(trials_dff, 0.3))
                 qi = 0
+
+                on = self.params["pre_trial"]
+                off = self.params["pre_trial"] + trial_len
 
                 on = self.params["pre_trial"]
                 off = self.params["pre_trial"] + trial_len
