@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
-from scipy.signal import butter, filtfilt
+from scipy.signal import butter, filtfilt, lfilter, sosfiltfilt
 from scipy.optimize import curve_fit
 from scipy.integrate import trapz
 import yaml
@@ -33,7 +33,7 @@ DEFAULT_PARAMS = {}
 class Rec2P:
 
     """
-    A recording master object
+    A recording master class
     """
 
     def __init__(self, data_path: str, sync: Sync):
@@ -173,6 +173,8 @@ class Rec2P:
             cell = Cell2P(self, id)
             cell.analyze()
 
+            cell.analyze_trials()
+
             if not keep_unresponsive and not cell.responsive:
 
                 # discard cell and free memory
@@ -208,28 +210,109 @@ class Rec2P:
 
         return self.cells
 
+    def compute_fingerprints(
+        self,
+        stim_trials_dict=None,
+        type="dff",
+        normalize="z",
+        smooth=True
+        ):
+
+        """
+        Compute a fingerprint for each cell by concatenating the average responses
+        to the specified stimuli and trials.
+
+        - stim_trials_dict: dict
+            A dict which specifies which stim and which trials to concatenate for computing 
+            the fingerptint.
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            stim name and [t1,...,tn] is a list of valid trials for that stim.
+        """
+
+        # check if the cells have already been retrived
+
+        if self.cells == None:
+
+            self.get_cells()
+
+        if stim_trials_dict == None:
+
+            stim_trials_dict = {stim:[] for stim in self.stims_trials_intersection}
+
+        responsive = self.get_responsive()
+
+        fingerprints = []
+
+        for cell in responsive:
+
+            average_resp = self.cells[cell].analyzed_trials
+
+            # concatenate the mean responses to all the trials specified by trial_names,
+            # for all the stimuli specified by stim_names.
+
+            concat_stims = []
+
+            for (stim,trials_names) in stim_trials_dict.items():
+
+                if not trials_names:
+
+                    trials_names = list(self.stims_trials_intersection[stim])
+
+                for trial_name in trials_names:
+
+                    r = average_resp[stim][trial_name]["average_%s"%type]
+
+                    # cut the responses
+                    start = average_resp[stim][trial_name]['window'][0]
+                    stop = average_resp[stim][trial_name]['window'][1]
+
+                    r = r[start:int(stop+start/2)]
+
+                    if smooth:
+                        # low-pass filter 
+                        r = filter(r,0.1)
+                    
+                    concat_stims = np.concatenate((concat_stims, r))
+
+            if normalize == "lin":
+
+                concat_stims = lin_norm(concat_stims,-1,1)
+
+            elif normalize == "z":
+
+                concat_stims = z_norm(concat_stims, True)
+
+            fingerprints.append(concat_stims)
+
+        # check lenghts consistency
+        fingerprints = check_len_consistency(fingerprints)
+
+        # convert to array
+        fingerprints = np.array(fingerprints)
+        
+        ## NB: index consistency between fingerprints array and list from get_responsive() is important here!
+
+        return fingerprints
+    
     def get_populations(
         self,
-        stims_names=None,
-        trials_names=None,
+        stim_trials_dict=None,
         n_clusters=None,
         use_tsne=False,
         type="dff",
-        normalize="norm",
+        normalize="lin",
         plot=True,
         ):
 
         """
-        Clusterize the activity traces of all the cells into population using PCA and K-means.
+        Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
 
-        - stims_names: list
-            The stimulation conditions to use for extracting the response feature of each cell.
-            By default the respopnses to all the stimuli will be used.
-        - trials_names: list
-            The responses to the specified trials will be concatenated and used as features for
-            th PCA, for all the stimuli specified by stims_names.
-            By default the respopnses to all the trial types will be used.
-        - n_clusters: int
+        - stim_trials_dict: dict
+            A dict which specifies which stim and which trials to concatenate for computing 
+            the fingerptint.
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            stim name and [t1,...,tn] is a list of valid trials for that stim.
+       - n_clusters: int
             Number of cluster to use for k means clustering
         - use_tsne: bool
             wether to compute tsne embedding after PCA decomposition
@@ -241,66 +324,12 @@ class Rec2P:
             otherwise, no normalization will be applied
 
         """
-
-        # check if the cells have already been retrived
-
-        if self.cells == None:
-
-            self.get_cells()
-
-        all_mean_resp = []
-
-        if stims_names == None:
-
-            stims_names = self.sync.stims_names
-
         responsive = self.get_responsive()
 
-        for cell in responsive:
+        # compute fingerprints
+        x = self.compute_fingerprints(stim_trials_dict,type,normalize)
 
-            average_resp = self.cells[cell].analyzed_trials
-
-            # concatenate the mean responses to all the trials specified by trial_names,
-            # for all the stimuli specified by stim_names.
-
-            concat_stims = []
-
-            for stim in stims_names:
-
-                if trials_names == None:
-
-                    trials_names = list(self.sync.sync_ds[stim].keys())[:-1]
-
-                for trial_name in trials_names:
-
-                    r = average_resp[stim][trial_name]["average_" + type]
-
-                    # cut the responses
-                    start = average_resp[stim][trial_name]['window'][0]
-                    stop = average_resp[stim][trial_name]['window'][1]
-
-                    r = r[start:int(stop+start/2)]
-                    # low-pass filter 
-                    r = filter(r,0.3)
-
-                    concat_stims = np.concatenate((concat_stims, r))
-
-            if normalize == "lin":
-
-                concat_stims = lin_norm(concat_stims)
-
-            elif normalize == "z":
-
-                concat_stims = z_norm(r, True)
-
-            all_mean_resp.append(concat_stims)
-
-        # convert to array
-        all_mean_resp = np.array(all_mean_resp)
-        x = np.array(all_mean_resp)
-
-        # run PCA and tSNE if desired
-
+        # embed data
         if use_tsne:
 
             if len(x)<50:
@@ -311,22 +340,13 @@ class Rec2P:
             # run PCA
             pca = PCA(n_components=n_comp)
             transformed = pca.fit_transform(x)
-            # run t-SNE
-            tsne = TSNE(n_components=2, 
-                        verbose=1, 
-                        metric='cosine', 
-                        early_exaggeration=2, 
-                        perplexity=15, 
-                        n_iter=2000, 
-                        init='pca', 
-                        angle=1)
-            
-            transformed = tsne.fit_transform(transformed)
+            # run t-SNE 
+            transformed = self.TSNE_embedding(x)
         
         else:
 
-            # run PCA
-            pca = PCA(n_components=3)
+            # PCA embedding
+            pca = PCA(n_components=50)
             transformed = pca.fit_transform(x)
 
         # if the nuber of cluster is not specified, find optimal n
@@ -358,6 +378,8 @@ class Rec2P:
         if plot:
 
             clist = list(colors.TABLEAU_COLORS.keys())
+            markers = list(Line2D.markers.items())[2:] 
+            # random.shuffle(markers)
 
             if use_tsne:
 
@@ -373,19 +395,25 @@ class Rec2P:
 
                 for l in np.unique(labels):
 
-                    ix = np.where(labels == l)
-                    ax.scatter(
-                        Xax[ix], Yax[ix], 
-                        c=clist[l],
-                        s=50, 
-                        marker='o',
-                        alpha=0.5
-                    )
+                    color = clist[l]
+                    ix = np.where(labels == l)[0]
+
+                    for i in ix:
+
+                        marker = markers[int(responsive[i].split('_')[0])][0]
+                        ax.scatter(
+                            Xax[i], Yax[i], 
+                            edgecolor=color,
+                            s=50, 
+                            marker=marker,
+                            facecolors='none',
+                            alpha=0.8
+                        )
 
                 ax.set_xlabel("%s 1"%algo, fontsize=9)
                 ax.set_ylabel("%s 2"%algo, fontsize=9)
-                ax.set_title("%d ROIs"%(len(Xax)))
 
+                ax.set_title("%d ROIs (n=%d)"%(len(Xax),len(self.recs)))
 
             else:
 
@@ -395,8 +423,6 @@ class Rec2P:
                 Yax = transformed[:, 1]
                 Zax = transformed[:, 2]
 
-                cdict = {0: "c", 1: "g", 2: "r", 3: "y", 4:"m"}
-
                 fig = plt.figure(figsize=(7, 5))
                 # ax = fig.add_subplot(111, projection="3d")
                 ax = fig.add_subplot(111)
@@ -405,24 +431,34 @@ class Rec2P:
 
                 for l in np.unique(labels):
 
-                    ix = np.where(labels == l)
+                    color = clist[l]
+                    ix = np.where(labels == l)[0]
                     # ax.scatter(
                     #     Xax[ix], Yax[ix], Zax[ix], c=clist[l], s=40)
-                    ax.scatter(
-                          Xax[ix], Yax[ix], c=clist[l], s=40)
+                    
+                    for i in ix:
+
+                        marker = markers[int(responsive[i].split('_')[0])][0]
+                        ax.scatter(
+                            Xax[i], Yax[i], 
+                            edgecolor=color,
+                            s=50, 
+                            marker=marker,
+                            facecolors='none',
+                            alpha=0.8
+                        )
 
                 ax.set_xlabel("%s 1"%algo, fontsize=9)
                 ax.set_ylabel("%s 2"%algo, fontsize=9)
                 # ax.set_zlabel("%s 3"%algo, fontsize=9)
 
-                ax.set_title("%d ROIs"%(len(Xax)))
+                ax.set_title("%d ROIs (n=%d)"%(len(Xax),len(self.recs)))
 
-                ax.view_init(30, 60)
+                # ax.view_init(30, 60)
 
 
         return clusters
-
-
+    
 class Cell2P:
 
     """
@@ -486,8 +522,8 @@ class Cell2P:
     def _compute_QI_(self, trials: np.ndarray):
 
         """
-        Calculate response quality index as defined by Baden et al.
-        over a matrix with shape (reps,time).
+        Calculate response quality index as defined by 
+        Baden et al. over a matrix with shape (reps,time).
         """
 
         a = np.var(trials.mean(axis=0))
@@ -555,6 +591,7 @@ class Cell2P:
         """
 
         analyzed_trials = {}
+        best_qi = 0
 
         for stim in self.stims_names:
 
@@ -652,6 +689,7 @@ class Cell2P:
                 }
 
         self.analyzed_trials = analyzed_trials
+        self.qi = best_qi
         self.is_responsive()
 
         return analyzed_trials
@@ -790,7 +828,6 @@ class Cell2P:
 
         return shuff_controls
 
-
 class Batch2P:
 
     """
@@ -900,7 +937,12 @@ class Batch2P:
 
             for (cell_id,cell) in rec.cells.items():
 
-                self.cells |= {"%s_%s_%s"%(str(group_id),str(rec_id),str(cell_id)):cell}
+                # new id
+                new_id = "%s_%s_%s"%(str(group_id),str(rec_id),str(cell_id))
+                self.cells |= {new_id:cell}
+                # update cell id
+                cell.idx = new_id
+
 
         return self.cells
 
@@ -926,6 +968,7 @@ class Batch2P:
         stim_trials_dict=None,
         type="dff",
         normalize="z",
+        smooth=True
         ):
 
         """
@@ -977,9 +1020,11 @@ class Batch2P:
                     stop = average_resp[stim][trial_name]['window'][1]
 
                     r = r[start:int(stop+start/2)]
-                    # low-pass filter 
-                    r = filter(r,0.2)
 
+                    if smooth:
+                        # low-pass filter 
+                        r = filter(r,0.1)
+                    
                     concat_stims = np.concatenate((concat_stims, r))
 
             if normalize == "lin":
@@ -997,69 +1042,11 @@ class Batch2P:
 
         # convert to array
         fingerprints = np.array(fingerprints)
-        # x = np.array(fingerprints)
-
+        
         ## NB: index consistency between fingerprints array and list from get_responsive() is important here!
 
         return fingerprints
 
-    def TSNE_embedding(
-        self,
-        data=None,
-        **kwargs
-        ):
-
-        if len(data)<50:           
-            n_comp = len(data)
-        else:
-            n_comp = 50
-        
-        if kwargs:
-            tsne_params = kwargs
-        else: 
-            tsne_params = {
-                'n_components':2, 
-                'verbose':1, 
-                'metric':'cosine', 
-                'early_exaggeration':4, 
-                'perplexity':15, 
-                'n_iter':2000, 
-                'init':'pca', 
-                'angle':0.1}
-        # run PCA
-        pca = PCA(n_components=n_comp)
-        transformed = pca.fit_transform(data)
-        # run t-SNE
-        tsne = TSNE(**tsne_params)
-        
-        transformed = tsne.fit_transform(transformed)
-
-        return transformed
-    
-    def k_means(
-        self,
-        data,
-        n_clusters
-    ):
-
-        # run Kmeans
-        kmeans = KMeans(n_clusters=n_clusters, 
-                        init="k-means++",
-                        algorithm="auto").fit(data)
-        
-        return kmeans.labels_
-    
-    def GMM( 
-        self,
-        data,
-        **kwargs
-    ):
-        
-        # run Gaussian Mixture Model
-        gm_labels = BayesianGaussianMixture(**kwargs).fit_predict(data)
-        
-        return gm_labels
-    
     def get_populations(
         self,
         stim_trials_dict=None,
@@ -1226,6 +1213,7 @@ class Batch2P:
         return clusters
 
 
+
 #############################
 ###---UTILITY FUNCTIONS---###
 #############################
@@ -1252,14 +1240,21 @@ def generate_params_file():
 
             return "params.yaml"
   
-def filter(s, wn, ord=4, btype="low"):
+def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode='filtfilt'):
 
     """
     Apply scipy's filtfilt to signal s.
     """
 
-    b, a = butter(ord, wn, btype)
-    s_filtered = filtfilt(b, a, s)
+    b, a = butter(ord, wn, btype, analog, fs=fs)
+    
+    if mode=='filtfilt':
+        s_filtered = filtfilt(b, a, s)
+    elif mode=='sosfiltfilt':
+        s_filtered = sosfiltfilt(b, a, s)
+    elif mode=='lfilter':
+        s_filtered = lfilter(b, a, s)
+
 
     return s_filtered
 
@@ -1296,6 +1291,62 @@ def lin_norm(s, lb=0, ub=1):
     """
     return (ub-lb)*((s - s.min()) / (s.max() - s.min()))+lb
 
+def TSNE_embedding(
+    data=None,
+    **kwargs
+    ):
+
+    if len(data)<50:           
+        n_comp = len(data)
+    else:
+        n_comp = 50
+    
+    if kwargs:
+        tsne_params = kwargs
+    else: 
+        tsne_params = {
+            'n_components':2, 
+            'verbose':1, 
+            'metric':'cosine', 
+            'early_exaggeration':4, 
+            'perplexity':15, 
+            'n_iter':2000, 
+            'init':'pca', 
+            'angle':0.1}
+    # run PCA
+    pca = PCA(n_components=n_comp)
+    transformed = pca.fit_transform(data)
+    # run t-SNE
+    tsne = TSNE(**tsne_params)
+    
+    transformed = tsne.fit_transform(transformed)
+
+    return transformed
+
+def k_means(
+    data,
+    n_clusters
+):
+
+    # run Kmeans
+    kmeans = KMeans(n_clusters=n_clusters, 
+                    init="k-means++",
+                    algorithm="auto").fit(data)
+    
+    return kmeans.labels_
+
+def GMM( 
+    data,
+    **kwargs
+):
+    
+    # run Gaussian Mixture Model
+    gmm = BayesianGaussianMixture(**kwargs)
+    gm_labels = gmm.fit_predict(data)
+    
+    print(gmm.converged_)
+    return gm_labels
+    
 def find_optimal_kmeans_k(x):
 
     """
