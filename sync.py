@@ -24,7 +24,7 @@ class Sync:
         self,
         sync_file: str,
         stims_sequence_file: str,
-        trials_names: dict,):
+        trials_names: dict):
 
         """
         Create a sync data structure from scanbox metadata file.
