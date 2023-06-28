@@ -28,6 +28,339 @@ TRIALS_C = {
 
 POPS_C = list(colors.TABLEAU_COLORS.keys())
 
+### DRAWING FUNCTIONS ###
+
+def draw_singleStim(
+    ax,
+    cells: list,
+    sync: Sync,
+    stim: str,
+    trials: None,
+    type="dff",
+    stim_window = True,
+    legend = False,
+    func_ = None
+):
+
+    """
+    Plot average response calculated across all the specified cells .
+
+    - cells: 
+        cell to plot. if a list of Cell2P object is passed, plot the mean. 
+    - sync: Sync
+        Sync object associated to the cells
+    - stim:
+        stimulation condition for which to plot the average
+    - trials:
+        trials to plot, can be str or list of str. If None, use all the possible trials 
+    - type: str
+        can be "dff", "spks", "zspks" 
+    - func: dict
+        function that will be applied to each signal. first argoument of the function is 
+        is assumed to be the signal. Should be in the form:
+        (func,**kwards) where kwards should not contain first argoument (signal)
+    """
+
+    # invert trials dict
+    inverted_trials_dict = {v:k for k,v in sync.trials_names.items()}
+
+    if trials == None:
+
+        trials = list(sync.sync_ds[stim].keys())[:-1]
+
+    elif isinstance(trials, str):
+
+        trials = [trials]
+
+    if isinstance(cells, list):
+
+        resp_dict = {}
+
+        for trial in trials:
+
+            if trial in sync.sync_ds[stim]:
+
+                resp_dict |= {trial:{}}
+
+                cells_avgs = []
+
+                for cell in cells:
+
+                    cells_avgs.append(cell.analyzed_trials[stim][trial]["average_" + type])
+
+                # check for lenght consistency
+                cells_avgs = check_len_consistency(cells_avgs)
+
+                resp_dict[trial] |= {"mean":np.mean(cells_avgs,axis=0), "sem":np.std(cells_avgs,axis=0)/np.sqrt(len(cells_avgs))}
+    else:
+
+        cell = cells
+
+    ymax = 0
+    ymin = 0
+
+    # draw the averages
+    title = stim+" -"
+    for trial in trials:
+
+        # if trial in sync.sync_ds[stim]:
+
+        if isinstance(cells, list):
+
+            r = resp_dict[trial]["mean"]
+            error = resp_dict[trial]["sem"]
+
+        else: 
+
+            r = cells.analyzed_trials[stim][trial]["average_" + type]
+            error = cells.analyzed_trials[stim][trial]["std_" + type]
+
+        if func_!=None:
+
+            r = func_[0](r,func_[1])
+
+        if (r + error).max() > ymax:
+
+            ymax = (r + error).max()
+
+        if (r - error).min() < ymin:
+
+            ymin = (r - error).min() 
+
+        x = np.arange(len(r)) / cell.params["fr"]
+
+        on_frame = (
+            cell.analyzed_trials[stim][trial]["window"][0] / cell.params["fr"]
+        )
+        off_frame = (
+            cell.analyzed_trials[stim][trial]["window"][1] / cell.params["fr"]
+        )
+
+        ax.plot(x, r, c=TRIALS_C[inverted_trials_dict[trial]], linewidth=1, alpha=0.8, label=trial)
+
+        ax.fill_between(
+            x, r + error, r - error, color=TRIALS_C[inverted_trials_dict[trial]], alpha=0.1
+        )
+
+        if stim_window:
+
+            ax.axvspan(on_frame, off_frame, color="k", alpha=0.1)
+            # only draw stim window for first trial
+            stim_window = False
+
+        ax.set_xticks(
+            [0, int(on_frame), int(off_frame), int(len(r) / cell.params["fr"])]
+        )
+
+        title += " %s"%trial
+
+        if type == "dff":
+
+            ax.set_ylabel("\u0394F/F")
+        
+        if type == "spks":
+            
+            ax.set_ylabel("OASIS spikes")
+
+        if type == "zspks":
+            
+            ax.set_ylabel("OASIS spikes (z-score)")
+
+        ax.set_xlabel("time (s)")
+
+        if legend or len(trials)>1:
+
+            ax.legend()
+            ax.set_title(stim)
+
+        else:
+
+            ax.set_title(title)
+
+    return ax, ymax, ymin
+
+def draw_full(
+    ax,
+    cells,
+    sync: Sync,
+    type="dff",
+    stim=None,
+    x_scale='sec'):
+
+    """
+    Plot full length traces for all cells. If stim is specified, plot full trace
+    for that stim. If cells is a list of Cell2P object, plot the average.
+
+    """
+
+    # invert trials dict
+    inverted_trials_dict = {v:k for k,v in sync.trials_names.items()}
+
+    if isinstance(cells, list):
+
+        avg = []
+
+        for cell in cells:
+
+            avg.append(eval("cell."+type))
+
+        r = np.mean(avg, axis=0)
+
+    else:
+
+        r = eval("cells."+type)
+        cell = cells
+
+
+    if stim != None:
+
+        r = r[sync.sync_ds[stim]["stim_window"][0]:
+              (sync.sync_ds[stim]["stim_window"][1]+
+              cell.params["baseline_frames"])]
+
+        stims = [stim]
+        offset = sync.sync_ds[stim]["stim_window"][0]
+        
+    else:
+
+        stims = sync.sync_ds
+        offset = 0
+
+    
+    if x_scale=='sec':
+
+        ax.set_xlabel("time (s)")
+        xscale = cell.params["fr"]
+
+    elif x_scale=='frames':
+
+        ax.set_xlabel("frames")
+        xscale = 1
+
+    x = np.arange(len(r))/xscale
+
+
+    ax.set_title(type)
+
+    ax.plot(x, r, c='k',linewidth=0.4)
+
+    ax.set_xlabel("time (s)")
+
+    if type == "Fraw" or type == "Fneu":
+
+        ax.set_ylabel("raw fluoresence")
+
+    else:
+
+        ax.set_ylabel("\u0394F/F")
+
+    for stim in stims:
+
+        for trial_type in list(sync.sync_ds[stim].keys())[:-1]:
+
+            c = TRIALS_C[inverted_trials_dict[trial_type]]
+
+            for i,trial in enumerate(sync.sync_ds[stim][trial_type]["trials"]):
+
+                ax.axvspan(int((trial[0]-offset)/xscale), int((trial[1]-offset)/xscale),
+                                color=c, alpha=0.2, label="_"*i+"%s -%s"%(stim,trial_type))
+                
+    ymax = r.max()
+    ymin = r.min()
+
+    return ax, ymax, ymin
+
+def draw_chirp_stim(
+                ax,
+                pad_l = 40,
+                stim_len = None,
+                fr = 15.5):
+
+    pad_left = np.ones(pad_l)*0.5
+    chunk_OFF = np.zeros(int(3*fr))
+    chunk_ON = np.ones(int(3*fr))
+    BG = np.ones(int(2*fr))*0.5
+    t_fm = np.linspace(0,20,int(10*fr))
+    FM = (chirp(t_fm,0.2,20,1)+1)/2
+    t_am = np.linspace(0,100,int(10*fr))
+    a_am = np.linspace(0.01,0.5,int(10*fr))
+    AM = (np.sin(t_am)*a_am)+0.5
+    
+    stim_conc = np.concatenate([pad_left,chunk_OFF,chunk_ON,chunk_OFF,chunk_ON*0.5,
+                                FM,BG,AM,BG,chunk_OFF,chunk_ON,chunk_OFF,chunk_ON,chunk_OFF])
+    
+    pad_right = np.ones((stim_len-len(stim_conc)))*0.5
+    stim_conc = np.concatenate([stim_conc, pad_right])
+
+    ax.plot(stim_conc,c='k')
+    green_x = len(stim_conc)-len(pad_right)-int(10.5*fr)
+    blue_x = len(stim_conc)-len(pad_right)-int(4.5*fr)
+    ax.axvline(green_x, 0, 1, linewidth=13, color='g',alpha=0.3)
+    ax.axvline(blue_x, 0, 1, linewidth=13, color='b',alpha=0.3)
+    
+    ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
+    ax.set_ylabel("brightness")
+
+    return ax
+
+def draw_full_field_stim(
+        ax,
+        pad_l = 40,
+        stim_len = None,
+        fr = 15.5):
+
+    pad_left = np.zeros(pad_l)
+    chunk_1 = np.ones(int(5*fr))
+
+    stim_conc = np.concatenate([pad_left,chunk_1])
+
+    pad_right = np.zeros((stim_len-len(stim_conc)))
+
+    stim_conc = np.concatenate([stim_conc, pad_right])  
+
+    stim_start = len(stim_conc)-len(pad_right)-int(5*fr)
+    stim_end = len(stim_conc)-len(pad_right)
+
+    ax.plot(stim_conc,c='k')
+    ax.axvspan(stim_start, stim_end, color='y', alpha=0.3)
+    ax.set_ylabel("brightness")
+
+    return ax
+
+def draw_heatmap(
+                 matrix, 
+                 vmin, 
+                 vmax,
+                 cb_label="", 
+                 ax=None):
+
+    """
+    Base function for drawing an hetmap from input matrix.
+    """
+
+    m = np.array(matrix)
+
+    map = sns.color_palette("icefire", as_cmap=True)
+
+    if cb_label != "":
+        cbar = True
+    else:
+        cbar = False
+
+    return sns.heatmap(
+        m,
+        vmin,vmax,
+        xticklabels=False,
+        yticklabels=False,
+        ax = ax,
+        cbar=cbar,
+        cmap = map,
+        cbar_kws=dict(
+            use_gridspec=False, location="bottom", pad=0.05, label=cb_label, aspect=40
+        ),
+    )
+
+### PLOTTING FUNCTIONS ###
 
 def plot_multipleStim(
     cells: list,
@@ -326,247 +659,7 @@ def plot_multipleStim(
                                 bbox_inches="tight")
 
             plt.close(fig)
-
-def draw_singleStim(
-    ax,
-    cells: list,
-    sync: Sync,
-    stim: str,
-    trials: None,
-    type="dff",
-    stim_window = True,
-    legend = False,
-    func_ = None
-):
-
-    """
-    Plot average response calculated across all the specified cells .
-
-    - cells: 
-        cell to plot. if a list of Cell2P object is passed, plot the mean. 
-    - sync: Sync
-        Sync object associated to the cells
-    - stim:
-        stimulation condition for which to plot the average
-    - trials:
-        trials to plot, can be str or list of str. If None, use all the possible trials 
-    - type: str
-        can be "dff", "spks", "zspks" 
-    - func: dict
-        function that will be applied to each signal. first argoument of the function is 
-        is assumed to be the signal. Should be in the form:
-        (func,**kwards) where kwards should not contain first argoument (signal)
-    """
-
-    # invert trials dict
-    inverted_trials_dict = {v:k for k,v in sync.trials_names.items()}
-
-    if trials == None:
-
-        trials = list(sync.sync_ds[stim].keys())[:-1]
-
-    elif isinstance(trials, str):
-
-        trials = [trials]
-
-    if isinstance(cells, list):
-
-        resp_dict = {}
-
-        for trial in trials:
-
-            if trial in sync.sync_ds[stim]:
-
-                resp_dict |= {trial:{}}
-
-                cells_avgs = []
-
-                for cell in cells:
-
-                    cells_avgs.append(cell.analyzed_trials[stim][trial]["average_" + type])
-
-                # check for lenght consistency
-                cells_avgs = check_len_consistency(cells_avgs)
-
-                resp_dict[trial] |= {"mean":np.mean(cells_avgs,axis=0), "sem":np.std(cells_avgs,axis=0)/np.sqrt(len(cells_avgs))}
-    else:
-
-        cell = cells
-
-    ymax = 0
-    ymin = 0
-
-    # draw the averages
-    title = stim+" -"
-    for trial in trials:
-
-        # if trial in sync.sync_ds[stim]:
-
-        if isinstance(cells, list):
-
-            r = resp_dict[trial]["mean"]
-            error = resp_dict[trial]["sem"]
-
-        else: 
-
-            r = cells.analyzed_trials[stim][trial]["average_" + type]
-            error = cells.analyzed_trials[stim][trial]["std_" + type]
-
-        if func_!=None:
-
-            r = func_[0](r,func_[1])
-
-        if (r + error).max() > ymax:
-
-            ymax = (r + error).max()
-
-        if (r - error).min() < ymin:
-
-            ymin = (r - error).min() 
-
-        x = np.arange(len(r)) / cell.params["fr"]
-
-        on_frame = (
-            cell.analyzed_trials[stim][trial]["window"][0] / cell.params["fr"]
-        )
-        off_frame = (
-            cell.analyzed_trials[stim][trial]["window"][1] / cell.params["fr"]
-        )
-
-        ax.plot(x, r, c=TRIALS_C[inverted_trials_dict[trial]], linewidth=1, alpha=0.8, label=trial)
-
-        ax.fill_between(
-            x, r + error, r - error, color=TRIALS_C[inverted_trials_dict[trial]], alpha=0.1
-        )
-
-        if stim_window:
-
-            ax.axvspan(on_frame, off_frame, color="k", alpha=0.1)
-            # only draw stim window for first trial
-            stim_window = False
-
-        ax.set_xticks(
-            [0, int(on_frame), int(off_frame), int(len(r) / cell.params["fr"])]
-        )
-
-        title += " %s"%trial
-
-        if type == "dff":
-
-            ax.set_ylabel("\u0394F/F")
-        
-        if type == "spks":
-            
-            ax.set_ylabel("OASIS spikes")
-
-        if type == "zspks":
-            
-            ax.set_ylabel("OASIS spikes (z-score)")
-
-        ax.set_xlabel("time (s)")
-
-        if legend or len(trials)>1:
-
-            ax.legend()
-            ax.set_title(stim)
-
-        else:
-
-            ax.set_title(title)
-
-    return ax, ymax, ymin
-
-def draw_full(
-    ax,
-    cells,
-    sync: Sync,
-    type="dff",
-    stim=None,
-    x_scale='sec'):
-
-    """
-    Plot full length traces for all cells. If stim is specified, plot full trace
-    for that stim. If cells is a list of Cell2P object, plot the average.
-
-    """
-
-    # invert trials dict
-    inverted_trials_dict = {v:k for k,v in sync.trials_names.items()}
-
-    if isinstance(cells, list):
-
-        avg = []
-
-        for cell in cells:
-
-            avg.append(eval("cell."+type))
-
-        r = np.mean(avg, axis=0)
-
-    else:
-
-        r = eval("cells."+type)
-        cell = cells
-
-
-    if stim != None:
-
-        r = r[sync.sync_ds[stim]["stim_window"][0]:
-              (sync.sync_ds[stim]["stim_window"][1]+
-              cell.params["baseline_frames"])]
-
-        stims = [stim]
-        offset = sync.sync_ds[stim]["stim_window"][0]
-        
-    else:
-
-        stims = sync.sync_ds
-        offset = 0
-
     
-    if x_scale=='sec':
-
-        ax.set_xlabel("time (s)")
-        xscale = cell.params["fr"]
-
-    elif x_scale=='frames':
-
-        ax.set_xlabel("frames")
-        xscale = 1
-
-    x = np.arange(len(r))/xscale
-
-
-    ax.set_title(type)
-
-    ax.plot(x, r, c='k',linewidth=0.4)
-
-    ax.set_xlabel("time (s)")
-
-    if type == "Fraw" or type == "Fneu":
-
-        ax.set_ylabel("raw fluoresence")
-
-    else:
-
-        ax.set_ylabel("\u0394F/F")
-
-    for stim in stims:
-
-        for trial_type in list(sync.sync_ds[stim].keys())[:-1]:
-
-            c = TRIALS_C[inverted_trials_dict[trial_type]]
-
-            for i,trial in enumerate(sync.sync_ds[stim][trial_type]["trials"]):
-
-                ax.axvspan(int((trial[0]-offset)/xscale), int((trial[1]-offset)/xscale),
-                                color=c, alpha=0.2, label="_"*i+"%s -%s"%(stim,trial_type))
-                
-    ymax = r.max()
-    ymin = r.min()
-
-    return ax, ymax, ymin
-        
 def plot_FOV(
         cells_idxs,
         rec, 
@@ -884,6 +977,81 @@ def plot_clusters(
 
         plt.savefig(save, bbox_inches='tight', bbox_extra_artists=(legend1,))
 
+def plot_sparse_noise(
+        cells,
+        texture_dim:tuple,
+        pre_trial:int,
+        freq=4,
+        sr = 15.5,
+        save_path=''
+):
+
+    """
+    Plot sparse noise responses for each cell, overlying ON and OFF responses
+    for each grid location.
+    - cells: list of Cell2P
+        cells to be plotted
+    - texture_dim: tuple
+        tuple specifying the dimension of the texture matrix used for sparse noise stim
+    - pre_trials: int
+        number of frames before the trial onset included when extracting each trial response
+    - freq: int
+        frequency of the sparse noise stim
+    - sr: int
+        sample rate of the recording
+    - save_path: str
+        path ehre to save the plot
+    """
+
+    for cell in cells:
+
+        fig, axs = plt.subplots(texture_dim[0],texture_dim[1],sharex=False,sharey=False)
+
+        if 'sparse_noise' not in cell.analyzed_trials:
+
+            warnings.warn("No Sparse Noise stim found for cell %s !"%cell.id, RuntimeWarning)
+            continue
+
+        ymax = 0
+        ymin = 0
+        for trial in cell.analyzed_trials['sparse_noise']:
+
+            row = int(trial.split(sep='_')[0])
+            col = int(trial.split(sep='_')[1])
+            type = trial.split(sep='_')[2]
+
+            r = cell.analyzed_trials['sparse_noise'][trial]['average_dff']
+            std = cell.analyzed_trials['sparse_noise'][trial]['std_dff']
+            x = np.arange(len(r))
+
+            if type=='white':
+                c = 'r'
+            elif type=='black':
+                c = 'k'
+
+
+            axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c)
+            axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
+            axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
+
+            if (row+col)==0:
+                axs[row,col].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
+
+            else:
+                axs[row,col].set_xticks([])
+                axs[row,col].set_yticks([])
+
+            if (r+std).max()>ymax: ymax = (r+std).max()
+            if (r-std).min()<ymin: ymin = (r-std).min()
+
+
+        plt.setp(axs, ylim=(ymin+(ymin/5),ymax+(ymax/5)))
+        plt.subplots_adjust(wspace=0.04)
+        plt.subplots_adjust(hspace=0.04)
+
+        plt.savefig(r'%s/%s.png'%(save_path,cell.id))
+        plt.close(fig)
+
 def plot_histogram(
     values:dict, 
     control_values=None,
@@ -939,98 +1107,7 @@ def plot_histogram(
     plt.savefig(save_name, bbox_inches='tight')
     plt.close(fig)
 
-def draw_heatmap(
-                 matrix, 
-                 vmin, 
-                 vmax,
-                 cb_label="", 
-                 ax=None):
-
-    """
-    Base function for drawing an hetmap from input matrix.
-    """
-
-    m = np.array(matrix)
-
-    map = sns.color_palette("icefire", as_cmap=True)
-
-    if cb_label != "":
-        cbar = True
-    else:
-        cbar = False
-
-    return sns.heatmap(
-        m,
-        vmin,vmax,
-        xticklabels=False,
-        yticklabels=False,
-        ax = ax,
-        cbar=cbar,
-        cmap = map,
-        cbar_kws=dict(
-            use_gridspec=False, location="bottom", pad=0.05, label=cb_label, aspect=40
-        ),
-    )
-
-def draw_chirp_stim(
-                ax,
-                pad_l = 40,
-                stim_len = None,
-                fr = 15.5):
-
-    pad_left = np.ones(pad_l)*0.5
-    chunk_OFF = np.zeros(int(3*fr))
-    chunk_ON = np.ones(int(3*fr))
-    BG = np.ones(int(2*fr))*0.5
-    t_fm = np.linspace(0,20,int(10*fr))
-    FM = (chirp(t_fm,0.2,20,1)+1)/2
-    t_am = np.linspace(0,100,int(10*fr))
-    a_am = np.linspace(0.01,0.5,int(10*fr))
-    AM = (np.sin(t_am)*a_am)+0.5
-    
-    stim_conc = np.concatenate([pad_left,chunk_OFF,chunk_ON,chunk_OFF,chunk_ON*0.5,
-                                FM,BG,AM,BG,chunk_OFF,chunk_ON,chunk_OFF,chunk_ON,chunk_OFF])
-    
-    pad_right = np.ones((stim_len-len(stim_conc)))*0.5
-    stim_conc = np.concatenate([stim_conc, pad_right])
-
-    ax.plot(stim_conc,c='k')
-    green_x = len(stim_conc)-len(pad_right)-int(10.5*fr)
-    blue_x = len(stim_conc)-len(pad_right)-int(4.5*fr)
-    ax.axvline(green_x, 0, 1, linewidth=13, color='g',alpha=0.3)
-    ax.axvline(blue_x, 0, 1, linewidth=13, color='b',alpha=0.3)
-    
-    ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
-    ax.set_ylabel("brightness")
-
-    return ax
-
-def draw_full_field_stim(
-        ax,
-        pad_l = 40,
-        stim_len = None,
-        fr = 15.5):
-
-    pad_left = np.zeros(pad_l)
-    chunk_1 = np.ones(int(5*fr))
-
-    stim_conc = np.concatenate([pad_left,chunk_1])
-
-    pad_right = np.zeros((stim_len-len(stim_conc)))
-
-    stim_conc = np.concatenate([stim_conc, pad_right])  
-
-    stim_start = len(stim_conc)-len(pad_right)-int(5*fr)
-    stim_end = len(stim_conc)-len(pad_right)
-
-    ax.plot(stim_conc,c='k')
-    ax.axvspan(stim_start, stim_end, color='y', alpha=0.3)
-    ax.set_ylabel("brightness")
-
-
-
-    return ax
-
+# UTILS #
 def _z_norm_(s, include_zeros=False):
 
     """

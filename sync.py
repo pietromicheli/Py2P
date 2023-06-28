@@ -27,15 +27,15 @@ class Sync:
         trials_names: dict,):
 
         """
-        Create a Sync object from scanbox metadata file.
+        Create a sync data structure from scanbox metadata file.
         It requires also a .npy file where the full sequence of stimuli is stored.
         This class is ment to work with recordings where different types of stimuli
         were presented to either ipsilateral, controlateral or both eyes, and the frames
         corresponding to the onset and offset of each trial stored in a .mat file.
 
         - sync_file:
-            Sync file containing a sequence of frames. Starting from the first element,
-            every pair of frames will be considered as the onset and the offset of the trials (er events) specified
+            .mat file containing a sequence of frames. Starting from the first element,
+            every pair of frames will be considered as the onset and the offset of the trials (or events) specified
             in the stims_sequence_file.
         - stims_sequence_file:
             absolute path to .json file containing the full sequence of stimuli presented
@@ -124,7 +124,9 @@ class Sync:
 
         return self
 
-    def load_data_structure(self, ds_json):
+    def load_data_structure(
+            self, 
+            ds_json):
 
         """
         Load data structure from a json file.
@@ -153,3 +155,62 @@ class Sync:
 
         return self
                         
+    def generate_data_structure_sn(
+        self,
+        sync_file: str,
+        texture_file: str,
+        trial_len=20,
+        ):
+
+        """
+        Crete a sync data structure specifically for Sparse Noise recordings.
+        It requires the scanbox metadata .mat file and the sparse noise texture .mat file
+        
+        - sync_file:
+            .mat file containing a sequence of frames. Starting from the first element,
+            every pair of frames will be considered as the onset and the offset of the trials (or events) specified
+            in the stims_sequence_file.
+        - texture_file:
+            .mat file containing the sequence of matrices which represent the textures presented during the sparse noise
+            stimulation.
+        - trial_len: int
+            number of frames that will be considered as part of a trial, starting from the onset frame present in sync_file
+        """     
+
+        self.sync_frames = np.squeeze(io.loadmat(sync_file)["info"][0][0][0])
+        self.textures = io.loadmat(texture_file)['stimulus_texture']
+        self.text_dim = self.textures.shape
+        self.trial_len = trial_len
+        self.stims_names.append("sparse_noise")
+        self.sync_ds.update({'sparse_noise':{}})
+
+        for i in range(self.text_dim[1]):
+            for j in range(self.text_dim[2]):
+
+                on_indexes = np.where(self.textures[:,i,j]==1)[0]
+                off_indexes = np.where(self.textures[:,i,j]==0)[0]
+
+                # extract sync frames where square turned white
+                on_frames = [(frame,frame+trial_len) for frame in self.sync_frames[on_indexes]]
+                # extract sync frames where square turned black
+                off_frames = [(frame,frame+trial_len) for frame in self.sync_frames[off_indexes]]
+
+                # on trial
+                self.trials_names.append('%d_%d_on'%(i,j))
+                self.sync_ds['sparse_noise']|=({'%d_%d_white'%(i,j): 
+                                                {'trials': on_frames,
+                                                'trial_len': trial_len,
+                                                'pause_len': 0}})
+                # off trial 
+                self.trials_names.append('%d_%d_off'%(i,j))
+                self.sync_ds['sparse_noise']|=({'%d_%d_black'%(i,j): 
+                                                {'trials': off_frames,
+                                                'trial_len': trial_len,
+                                                'pause_len': 0}})
+
+
+
+
+        self.sync_ds['sparse_noise']|={'stim_window':(self.sync_frames[0],self.sync_frames[-1])}
+
+        return self  
