@@ -633,9 +633,11 @@ def plot_multipleStim(
                 ax.set_ylim(y_min, y_max)
 
         if share_y:
+
             plt.subplots_adjust(wspace=0.01)
 
         if share_x:
+            
             plt.subplots_adjust( hspace=0.01)
             
 

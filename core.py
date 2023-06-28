@@ -74,12 +74,6 @@ class Rec2P:
         self.spks = np.load(data_path + r"/spks.npy")
         self.stat = np.load(data_path + r"/stat.npy", allow_pickle=True)
         self.ops = np.load(data_path + r"/ops.npy", allow_pickle=True)
-        self.Fraw = np.load(data_path + r"/F.npy")
-        self.Fneu = np.load(data_path + r"/Fneu.npy")
-        self.iscell = np.load(data_path + r"/iscell.npy")
-        self.spks = np.load(data_path + r"/spks.npy")
-        self.stat = np.load(data_path + r"/stat.npy", allow_pickle=True)
-        self.ops = np.load(data_path + r"/ops.npy", allow_pickle=True)
 
         print("OK")
 
@@ -160,25 +154,27 @@ class Rec2P:
         responsive = []
 
         if n == None:
+
             n_cells = self.get_ncells()
 
             if self.params["use_iscell"]:
+                 
                  n_cells = int(np.sum(self.iscell[:,0]))
 
         else:
+
             n_cells = n
 
         for id in tqdm(range(n_cells)):
 
             if self.params["use_iscell"]:
+
                 # check the ROIS has been classified as cell by suite2p
                 if not self.iscell[id][0]:
                     continue
 
             cell = Cell2P(self, id)
             cell.analyze()
-
-            cell.analyze_trials()
 
             if not keep_unresponsive and not cell.responsive:
 
@@ -524,10 +520,6 @@ class Cell2P:
         self.zspks = np.where(
                         abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
                     )
-        # z-score and filter spikes
-        self.zspks = np.where(
-                        abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
-                    )
 
     def _compute_QI_(self, trials: np.ndarray):
 
@@ -646,12 +638,15 @@ class Cell2P:
                     resp = self.FrawCorr[
                         trial[0]
                         - self.params["pre_trial"] : trial[0]
-                        - self.params["pre_trial"] : trial[0]
                         + trial_len
                         + pause_len
                     ]
 
                     resp_dff = (resp - mean_baseline) / mean_baseline
+
+                    # smooth with lp filter
+                    # resp_dff = filter(resp_dff, self.params["lowpass_wn"])
+
                     trials_dff.append(resp_dff)
 
                     # spiking activity
@@ -679,9 +674,11 @@ class Cell2P:
                 trials_zspks = np.array(trials_zspks)
 
                 # calculate QI over df/f traces
+                qi = self._compute_QI_(filter(trials_dff, 0.3))
 
-                # qi = self._compute_QI_(filter(trials_dff, 0.3))
-                qi = 0
+                if qi>best_qi: 
+
+                    best_qi=qi
 
                 on = self.params["pre_trial"]
                 off = self.params["pre_trial"] + trial_len
