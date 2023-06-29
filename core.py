@@ -470,7 +470,7 @@ class Cell2P:
 
     def __init__(self, rec: Rec2P, id: int):
 
-        self.idx = id
+        self.id = id
         self.responsive = None
         self.analyzed_trials = None
 

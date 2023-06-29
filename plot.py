@@ -457,7 +457,7 @@ def plot_multipleStim(
         add_row +=1
 
     # main loop
-    for c in cells:
+    for c in tqdm(cells):
 
         if group_trials:
 
@@ -993,7 +993,7 @@ def plot_sparse_noise(
         cells to be plotted
     - texture_dim: tuple
         tuple specifying the dimension of the texture matrix used for sparse noise stim
-    - pre_trials: int
+    - pre_trial: int
         number of frames before the trial onset included when extracting each trial response
     - freq: int
         frequency of the sparse noise stim
@@ -1003,7 +1003,7 @@ def plot_sparse_noise(
         path ehre to save the plot
     """
 
-    for cell in cells:
+    for cell in tqdm(cells):
 
         fig, axs = plt.subplots(texture_dim[0],texture_dim[1],sharex=False,sharey=False)
 
@@ -1028,7 +1028,6 @@ def plot_sparse_noise(
                 c = 'r'
             elif type=='black':
                 c = 'k'
-
 
             axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c)
             axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)

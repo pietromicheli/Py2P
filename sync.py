@@ -182,7 +182,7 @@ class Sync:
         self.text_dim = self.textures.shape
         self.trial_len = trial_len
         self.stims_names.append("sparse_noise")
-        self.sync_ds.update({'sparse_noise':{}})
+        self.sync_ds = {'sparse_noise':{}}
 
         for i in range(self.text_dim[1]):
             for j in range(self.text_dim[2]):
@@ -196,20 +196,17 @@ class Sync:
                 off_frames = [(frame,frame+trial_len) for frame in self.sync_frames[off_indexes]]
 
                 # on trial
-                self.trials_names.append('%d_%d_on'%(i,j))
+                # self.trials_names.append('%d_%d_on'%(i,j))
                 self.sync_ds['sparse_noise']|=({'%d_%d_white'%(i,j): 
                                                 {'trials': on_frames,
                                                 'trial_len': trial_len,
                                                 'pause_len': 0}})
                 # off trial 
-                self.trials_names.append('%d_%d_off'%(i,j))
+                # self.trials_names.append('%d_%d_off'%(i,j))
                 self.sync_ds['sparse_noise']|=({'%d_%d_black'%(i,j): 
                                                 {'trials': off_frames,
                                                 'trial_len': trial_len,
                                                 'pause_len': 0}})
-
-
-
 
         self.sync_ds['sparse_noise']|={'stim_window':(self.sync_frames[0],self.sync_frames[-1])}
 
