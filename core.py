@@ -154,17 +154,19 @@ class Rec2P:
 
         if n == None:
 
-            n_cells = self.get_ncells()
+            idxs_cells = np.arange(0,self.get_ncells())
 
             if self.params["use_iscell"]:
                  
-                 n_cells = int(np.sum(self.iscell[:,0]))
+                 idxs_cells = np.where(self.iscell[:,0]==1)[0]
+                #  n_cells = int(np.sum(self.iscell[:,0]))
 
         else:
+            
+            idxs_cells = np.arange(0,n)
+            # n_cells = n
 
-            n_cells = n
-
-        for id in tqdm(range(n_cells)):
+        for id in tqdm(idxs_cells):
 
             if self.params["use_iscell"]:
 
@@ -197,8 +199,8 @@ class Rec2P:
         else:
 
             print(
-                "> %d responsive cells found (tot: %d, keep_unresponsive: %r)"
-                % (len(responsive), n_cells, keep_unresponsive)
+                "> %d responsive cells found (tot: %d, keep_unresponsive: %r, use_iscell: %r)"
+                % (len(responsive), self.get_ncells(), keep_unresponsive, self.params["use_iscell"])
             )
 
         if clean_memory:
@@ -1222,7 +1224,6 @@ class Batch2P:
 
 
         return clusters
-
 
 
 #############################
