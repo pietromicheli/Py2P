@@ -647,14 +647,14 @@ def plot_multipleStim(
 
                 for path in save_path:
 
-                    plt.savefig("%s\\pop_average_%s%s.png" %(path,type,save_suffix), 
+                    plt.savefig(r"%s/pop_average_%s%s.png" %(path,type,save_suffix), 
                                 bbox_inches="tight")
 
             else:
 
                 for path in save_path:
                 
-                    plt.savefig("%s\\ROI_#%s_%s%s.png" %(path,c.idx,type,save_suffix),
+                    plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.idx,type,save_suffix),
                                 bbox_inches="tight")
 
             plt.close(fig)
@@ -687,6 +687,8 @@ def plot_FOV(
 
     img_rgb = ((np.stack([mean_img,mean_img,mean_img],axis=2)-np.min(mean_img))/np.max((mean_img-np.min(mean_img))))*k
 
+    plt.figure(figsize=(10,7))
+
     for i,pop in enumerate(cells_idxs):
 
         c = POPS_C[i]
@@ -695,7 +697,6 @@ def plot_FOV(
 
             # extract and color ROIs pixels
            
-
             ypix = rec.stat[idx]['ypix']
 
             xpix = rec.stat[idx]['xpix']
@@ -704,10 +705,12 @@ def plot_FOV(
 
                 img_rgb[(y),(x)] = colors.to_rgb(c)
 
+        plt.plot(0,0,c=c,label='POP_#%d'%i)
 
-    plt.figure(figsize=(10,7))
+
     plt.imshow(img_rgb, aspect='auto')
     plt.axis('off')
+    plt.legend(loc="upper right", bbox_to_anchor=(1.15, 1.0))
     plt.savefig(save_path, bbox_inches="tight")
     
 def plot_averages_heatmap(
@@ -745,13 +748,15 @@ def plot_averages_heatmap(
         argoument will be ignored
     """
 
-    save_path = "\\population_responses_"
+    if save:
 
-    if os.path.isdir(save_path):
+        save_path = r"/population_responses_"
 
-        shutil.rmtree(save_path)
+        if os.path.isdir(save_path):
 
-    os.mkdir(save_path)
+            shutil.rmtree(save_path)
+
+        os.mkdir(save_path)
 
     resp_all = []
 
@@ -875,7 +880,7 @@ def plot_averages_heatmap(
 
         if save:
 
-            plt.savefig("%s\\%s.png" % (save_path, name), bbox_inches="tight")
+            plt.savefig("r%s/%s.png" % (save_path, name), bbox_inches="tight")
             plt.close(fig)
 
     else:
