@@ -6,7 +6,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Py2P.core import *
 
-def fit_oscillator(s,fs,plot_ps=False,freq_int=[0.2,0.2]):
+def fit_oscillator(
+        s,
+        fs,
+        freq_int=[0.2,0.2],
+        plot_ps=False):
 
     def optSinWrap(freq_osc=None):
         def optSin(x,freq_osc,phi):
@@ -63,7 +67,12 @@ def fit_oscillator(s,fs,plot_ps=False,freq_int=[0.2,0.2]):
 
     return {'f':freq_osc,'fopt':popt[0],'phi':popt[1],'freq_range':freq_range},optSin(t,popt[0],popt[1])
 
-def kill_freq(s,fs,f,freq_range,type='bs',lpcut=1.2):
+def kill_freq(
+        s,
+        fs,
+        freq_range,
+        type='bs',
+        lpcut=1.2):
 
     dt = 1/fs
 
@@ -83,7 +92,14 @@ def kill_freq(s,fs,f,freq_range,type='bs',lpcut=1.2):
 
     return cut_s
 
-def deoscillate(x,x_train,fs,lpcut=1.2,norm=True,plot=False,freq_int=[0.2,0.2]):
+def deoscillate(
+        x,
+        x_train,
+        fs,
+        lpcut=1.2,
+        norm=True,
+        plot=False,
+        freq_int=[0.2,0.2]):
 
     # estimate oscillation frequency from x_train
     # tosc = np.linspace(0,x_train.size/fs,x_train.size)

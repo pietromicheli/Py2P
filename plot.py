@@ -981,6 +981,7 @@ def plot_sparse_noise(
         cells,
         texture_dim:tuple,
         pre_trial:int,
+        mode='lines',
         freq=4,
         sr = 15.5,
         save_path=''
@@ -1029,24 +1030,26 @@ def plot_sparse_noise(
             elif type=='black':
                 c = 'k'
 
-            axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c)
-            axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
-            axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
+            if mode=='lines':
+                axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c)
+                axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
+                axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
 
-            if (row+col)==0:
-                axs[row,col].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
+                if (row+col)==0:
+                    axs[row,col].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
 
-            else:
-                axs[row,col].set_xticks([])
-                axs[row,col].set_yticks([])
+                else:
+                    axs[row,col].set_xticks([])
+                    axs[row,col].set_yticks([])
 
-            if (r+std).max()>ymax: ymax = (r+std).max()
-            if (r-std).min()<ymin: ymin = (r-std).min()
+                if (r+std).max()>ymax: ymax = (r+std).max()
+                if (r-std).min()<ymin: ymin = (r-std).min()                
 
-
-        plt.setp(axs, ylim=(ymin+(ymin/5),ymax+(ymax/5)))
+        plt.setp(axs, ylim=(ymin+(ymin/10),ymax+(ymax/10)))
         plt.subplots_adjust(wspace=0.04)
         plt.subplots_adjust(hspace=0.04)
+        axs[0,0].set_xlabel('frames')
+        axs[0,0].set_ylabel('dff')
 
         plt.savefig(r'%s/%s.png'%(save_path,cell.id))
         plt.close(fig)
