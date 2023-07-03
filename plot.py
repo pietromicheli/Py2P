@@ -636,9 +636,8 @@ def plot_multipleStim(
 
             plt.subplots_adjust(wspace=0.01)
 
-
         if share_x:
-
+            
             plt.subplots_adjust( hspace=0.01)
             
 

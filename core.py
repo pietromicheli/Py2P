@@ -676,8 +676,11 @@ class Cell2P:
                 qi = self._compute_QI_(filter(trials_dff, 0.3))
 
                 if qi>best_qi: 
-                    
+
                     best_qi=qi
+
+                on = self.params["pre_trial"]
+                off = self.params["pre_trial"] + trial_len
 
                 on = self.params["pre_trial"]
                 off = self.params["pre_trial"] + trial_len
