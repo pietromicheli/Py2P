@@ -14,8 +14,8 @@ import warnings
 from math import ceil
 from tqdm import tqdm
 
-from Py2P.core import *
-from Py2P.sync import Sync
+from .core import *
+from .sync import Sync
 
 
 TRIALS_C = {
@@ -277,24 +277,25 @@ def draw_chirp_stim(
                 fr = 15.5):
 
     pad_left = np.ones(pad_l)*0.5
-    chunk_OFF = np.zeros(int(3*fr))
+    chunk_OFF1 = np.zeros(int(2*fr))
     chunk_ON = np.ones(int(3*fr))
+    chunk_OFF2 = np.zeros(int(3*fr))
     BG = np.ones(int(2*fr))*0.5
-    t_fm = np.linspace(0,20,int(10*fr))
+    t_fm = np.linspace(0,20,int(8*fr))
     FM = (chirp(t_fm,0.2,20,1)+1)/2
-    t_am = np.linspace(0,100,int(10*fr))
-    a_am = np.linspace(0.01,0.5,int(10*fr))
+    t_am = np.linspace(0,100,int(12*fr))
+    a_am = np.linspace(0.01,0.5,int(12*fr))
     AM = (np.sin(t_am)*a_am)+0.5
     
-    stim_conc = np.concatenate([pad_left,chunk_OFF,chunk_ON,chunk_OFF,chunk_ON*0.5,
-                                FM,BG,AM,BG,chunk_OFF,chunk_ON,chunk_OFF,chunk_ON,chunk_OFF])
+    stim_conc = np.concatenate([pad_left,chunk_OFF1,chunk_ON,chunk_OFF2,chunk_ON*0.5,
+                                FM,BG,AM,BG,chunk_OFF1,chunk_ON,chunk_OFF1,chunk_ON,chunk_OFF1])
     
     pad_right = np.ones((stim_len-len(stim_conc)))*0.5
     stim_conc = np.concatenate([stim_conc, pad_right])
 
     ax.plot(stim_conc,c='k')
-    green_x = len(stim_conc)-len(pad_right)-int(10.5*fr)
-    blue_x = len(stim_conc)-len(pad_right)-int(4.5*fr)
+    green_x = len(stim_conc)-len(pad_right)-int(8.5*fr)
+    blue_x = len(stim_conc)-len(pad_right)-int(3.5*fr)
     ax.axvline(green_x, 0, 1, linewidth=13, color='g',alpha=0.3)
     ax.axvline(blue_x, 0, 1, linewidth=13, color='b',alpha=0.3)
     
@@ -479,7 +480,7 @@ def plot_multipleStim(
 
         else:
             
-            fig.suptitle("ROI #%s   QI:%.2f"%(c.idx,c.qi))
+            fig.suptitle("ROI #%s   QI:%.2f"%(c.id,c.qi))
 
 
         if not isinstance(axs, np.ndarray):
@@ -503,7 +504,7 @@ def plot_multipleStim(
 
                     axs_ = axs[0]
 
-                elif plot_stim:
+                if plot_stim:
 
                     axs_= axs[1]
 
@@ -521,7 +522,7 @@ def plot_multipleStim(
 
                 if ymin < y_min: y_min = ymin
 
-                if j>0: axs_[j].set_ylabel("")
+                if j>0: axs_.set_ylabel("")
 
                 if full:
 
@@ -594,7 +595,7 @@ def plot_multipleStim(
                         cell = c[0]
 
                     fr = cell.params["fr"]
-                    pad_l = cell.params["baseline_frames"]
+                    pad_l = cell.params["pre_trial"]
 
                     stim_len = 0
                     for ax in axs_T[1:]:
@@ -654,13 +655,13 @@ def plot_multipleStim(
 
                 for path in save_path:
                 
-                    plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.idx,type,save_suffix),
+                    plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.id,type,save_suffix),
                                 bbox_inches="tight")
 
             plt.close(fig)
     
 def plot_FOV(
-        cells_idxs,
+        cells_ids,
         rec, 
         save_path="FOV.png", 
         k=10, 
@@ -668,7 +669,7 @@ def plot_FOV(
 
     '''
     Plot mean image of the FOV with masks of the passed cells.
-    If cells_idxs is list of lists, each sublist will be considered as a population.
+    If cells_ids is list of lists, each sublist will be considered as a population.
 
     - cells: list 
         list or list of lists of Cell2P objects.
@@ -679,9 +680,9 @@ def plot_FOV(
 
     '''
 
-    if not isinstance(cells_idxs, list):
+    if not isinstance(cells_ids, list):
 
-        cells_idxs = [cells_idxs]
+        cells_ids = [cells_ids]
 
     mean_img = rec.ops.item()[img]
 
@@ -689,7 +690,7 @@ def plot_FOV(
 
     plt.figure(figsize=(10,7))
 
-    for i,pop in enumerate(cells_idxs):
+    for i,pop in enumerate(cells_ids):
 
         c = POPS_C[i]
 
@@ -898,6 +899,7 @@ def plot_clusters(
     algo='',
     l1loc='upper right',
     l2loc='upper left',
+    groups_name='Group',
     save=None
 
 ):
@@ -923,9 +925,12 @@ def plot_clusters(
     # random.shuffle(allmarkers)
     # random.shuffle(clist)
 
+    singlemarker = False
+
     if markers==None:
 
-        markers= np.zeros(len(data),int).tolist()
+        markers = np.zeros(len(data),int).tolist()
+        singlemarker = True
 
     Xax = data[:, 0]
     Yax = data[:, 1]
@@ -939,7 +944,7 @@ def plot_clusters(
     for m in np.unique(markers):
 
         marker = allmarkers[m][0]
-        ix = np.where(markers == m)[0]
+        ix = np.where(markers==m)[0]
 
         s = ax.scatter(
             Xax[ix], Yax[ix], 
@@ -961,14 +966,15 @@ def plot_clusters(
 
     legend1 = ax.legend(p,
                         l,
-                        loc=l1loc,
-                        bbox_to_anchor=(1.04, 1))
+                        # loc=l1loc,
+                        bbox_to_anchor=(1.2, 1.0)
+                        )
     ax.add_artist(legend1)
     
-    if not markers==None:
+    if not singlemarker:
 
         legend2 = ax.legend((s for s in scatters),
-                            ('Group %d'%i for i in range(len(scatters))),
+                            ('%s %d'%(groups_name,i) for i in range(len(scatters))),
                             loc=l2loc)
         ax.add_artist(legend2)
 
@@ -1028,16 +1034,15 @@ def plot_sparse_noise(
             std = cell.analyzed_trials['sparse_noise'][trial]['std_dff']
             x = np.arange(len(r))
 
-            if type=='white':
+            if type=='on':
                 c = 'r'
-            elif type=='black':
+            elif type=='off':
                 c = 'k'
 
-
-            axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c)
+            axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c,label=str(cell.analyzed_trials['sparse_noise'][trial]["QI"]<0.05))
             axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
             axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
-
+            axs[row,col].legend(fontsize="4")
             if (row+col)==0:
                 axs[row,col].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
 

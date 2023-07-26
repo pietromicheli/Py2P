@@ -17,7 +17,7 @@ class Sync:
 
         self.sync_frames = []
         self.stims_names = []
-        self.trials_names = {}
+        self.trials_names = None
         self.sync_ds = None
 
     def generate_data_structure(
@@ -181,8 +181,9 @@ class Sync:
         self.textures = io.loadmat(texture_file)['stimulus_texture']
         self.text_dim = self.textures.shape
         self.trial_len = trial_len
+        self.trials_names = []
         self.stims_names.append("sparse_noise")
-        self.sync_ds.update({'sparse_noise':{}})
+        self.sync_ds = {'sparse_noise':{}}
 
         for i in range(self.text_dim[1]):
             for j in range(self.text_dim[2]):
@@ -197,13 +198,13 @@ class Sync:
 
                 # on trial
                 self.trials_names.append('%d_%d_on'%(i,j))
-                self.sync_ds['sparse_noise']|=({'%d_%d_white'%(i,j): 
+                self.sync_ds['sparse_noise']|=({'%d_%d_on'%(i,j): 
                                                 {'trials': on_frames,
                                                 'trial_len': trial_len,
                                                 'pause_len': 0}})
                 # off trial 
                 self.trials_names.append('%d_%d_off'%(i,j))
-                self.sync_ds['sparse_noise']|=({'%d_%d_black'%(i,j): 
+                self.sync_ds['sparse_noise']|=({'%d_%d_off'%(i,j): 
                                                 {'trials': off_frames,
                                                 'trial_len': trial_len,
                                                 'pause_len': 0}})

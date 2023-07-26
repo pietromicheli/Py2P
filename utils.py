@@ -1,4 +1,3 @@
-import pywt
 from scipy.signal import convolve
 from scipy.optimize import curve_fit
 from scipy.fftpack import rfft, irfft, rfftfreq

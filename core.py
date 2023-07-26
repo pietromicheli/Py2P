@@ -9,6 +9,7 @@ from sklearn.mixture import GaussianMixture, BayesianGaussianMixture
 from scipy.signal import butter, filtfilt, lfilter, sosfiltfilt
 from scipy.optimize import curve_fit
 from scipy.integrate import trapz
+from scipy.stats import ttest_ind
 import yaml
 import warnings
 from tqdm import tqdm
@@ -17,7 +18,7 @@ from matplotlib import pyplot as plt
 from matplotlib import colors
 from matplotlib.lines import Line2D
 
-from Py2P.sync import Sync
+from .sync import Sync
 
 pathlib.Path(__file__).parent.resolve()
 
@@ -27,6 +28,7 @@ DEFAULT_PARAMS = {}
 ########################
 ###---MAIN CLASSES---###
 ########################
+
 
 class Rec2P:
 
@@ -90,7 +92,7 @@ class Rec2P:
         return self.Fraw.shape[1]
 
     def get_ncells(self):
-        return self.Fraw.shape[0]   
+        return self.Fraw.shape[0]
 
     def load_params(self):
 
@@ -130,11 +132,8 @@ class Rec2P:
         return ids
 
     def get_cells(
-        self, 
-        keep_unresponsive: bool = False, 
-        n: int = None,
-        clean_memory = True
-        ):
+        self, keep_unresponsive: bool = False, n: int = None, clean_memory=True
+    ):
 
         """
         Retrive the cells from the recording files.
@@ -154,16 +153,16 @@ class Rec2P:
 
         if n == None:
 
-            idxs_cells = np.arange(0,self.get_ncells())
+            idxs_cells = np.arange(0, self.get_ncells())
 
             if self.params["use_iscell"]:
-                 
-                 idxs_cells = np.where(self.iscell[:,0]==1)[0]
-                #  n_cells = int(np.sum(self.iscell[:,0]))
+
+                idxs_cells = np.where(self.iscell[:, 0] == 1)[0]
+            #  n_cells = int(np.sum(self.iscell[:,0]))
 
         else:
-            
-            idxs_cells = np.arange(0,n)
+
+            idxs_cells = np.arange(0, n)
             # n_cells = n
 
         for id in tqdm(idxs_cells):
@@ -200,7 +199,12 @@ class Rec2P:
 
             print(
                 "> %d responsive cells found (tot: %d, keep_unresponsive: %r, use_iscell: %r)"
-                % (len(responsive), self.get_ncells(), keep_unresponsive, self.params["use_iscell"])
+                % (
+                    len(responsive),
+                    self.get_ncells(),
+                    keep_unresponsive,
+                    self.params["use_iscell"],
+                )
             )
 
         if clean_memory:
@@ -213,21 +217,17 @@ class Rec2P:
         return self.cells
 
     def compute_fingerprints(
-        self,
-        stim_trials_dict=None,
-        type="dff",
-        normalize="z",
-        smooth=True
-        ):
+        self, stim_trials_dict=None, type="dff", normalize="z", smooth=True
+    ):
 
         """
         Compute a fingerprint for each cell by concatenating the average responses
         to the specified stimuli and trials.
 
         - stim_trials_dict: dict
-            A dict which specifies which stim and which trials to concatenate for computing 
+            A dict which specifies which stim and which trials to concatenate for computing
             the fingerptint.
-            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid
             stim name and [t1,...,tn] is a list of valid trials for that stim.
         """
 
@@ -239,7 +239,7 @@ class Rec2P:
 
         if stim_trials_dict == None:
 
-            stim_trials_dict = {stim:[] for stim in self.stims_trials_intersection}
+            stim_trials_dict = {stim: [] for stim in self.stims_trials_intersection}
 
         responsive = self.get_responsive()
 
@@ -254,7 +254,7 @@ class Rec2P:
 
             concat_stims = []
 
-            for (stim,trials_names) in stim_trials_dict.items():
+            for (stim, trials_names) in stim_trials_dict.items():
 
                 if not trials_names:
 
@@ -262,23 +262,23 @@ class Rec2P:
 
                 for trial_name in trials_names:
 
-                    r = average_resp[stim][trial_name]["average_%s"%type]
+                    r = average_resp[stim][trial_name]["average_%s" % type]
 
                     # cut the responses
-                    start = average_resp[stim][trial_name]['window'][0]
-                    stop = average_resp[stim][trial_name]['window'][1]
+                    start = average_resp[stim][trial_name]["window"][0]
+                    stop = average_resp[stim][trial_name]["window"][1]
 
-                    r = r[start:int(stop+start/2)]
+                    r = r[start : int(stop + start / 2)]
 
                     if smooth:
-                        # low-pass filter 
-                        r = filter(r,0.1)
-                    
+                        # low-pass filter
+                        r = filter(r, 0.1)
+
                     concat_stims = np.concatenate((concat_stims, r))
 
             if normalize == "lin":
 
-                concat_stims = lin_norm(concat_stims,-1,1)
+                concat_stims = lin_norm(concat_stims, -1, 1)
 
             elif normalize == "z":
 
@@ -291,11 +291,11 @@ class Rec2P:
 
         # convert to array
         fingerprints = np.array(fingerprints)
-        
+
         ## NB: index consistency between fingerprints array and list from get_responsive() is important here!
 
         return fingerprints
-    
+
     def get_populations(
         self,
         stim_trials_dict=None,
@@ -304,18 +304,18 @@ class Rec2P:
         type="dff",
         normalize="lin",
         plot=True,
-        ):
+    ):
 
         """
-        Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
+         Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
 
         - stim_trials_dict: dict
-            A dict which specifies which stim and which trials to concatenate for computing 
+            A dict which specifies which stim and which trials to concatenate for computing
             the fingerptint.
-            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid
             stim name and [t1,...,tn] is a list of valid trials for that stim.
-       - n_clusters: int
-            Number of cluster to use for k means clustering
+        - n_clusters: int
+                Number of cluster to use for k means clustering
         - use_tsne: bool
             wether to compute tsne embedding after PCA decomposition
         - type: str
@@ -329,22 +329,22 @@ class Rec2P:
         responsive = self.get_responsive()
 
         # compute fingerprints
-        x = self.compute_fingerprints(stim_trials_dict,type,normalize)
+        x = self.compute_fingerprints(stim_trials_dict, type, normalize)
 
         # embed data
         if use_tsne:
 
-            if len(x)<50:
+            if len(x) < 50:
                 n_comp = len(x)
             else:
                 n_comp = 50
-                
+
             # run PCA
             pca = PCA(n_components=n_comp)
             transformed = pca.fit_transform(x)
-            # run t-SNE 
+            # run t-SNE
             transformed = self.TSNE_embedding(x)
-        
+
         else:
 
             # PCA embedding
@@ -357,10 +357,10 @@ class Rec2P:
             n_clusters = find_optimal_kmeans_k(transformed)
 
         # run Kmeans
-        kmeans = KMeans(n_clusters=n_clusters, 
-                        init="k-means++",
-                        algorithm="auto").fit(transformed)
-        
+        kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(
+            transformed
+        )
+
         labels = kmeans.labels_
 
         # retrive clusters
@@ -380,7 +380,7 @@ class Rec2P:
         if plot:
 
             clist = list(colors.TABLEAU_COLORS.keys())
-            markers = list(Line2D.markers.items())[2:] 
+            markers = list(Line2D.markers.items())[2:]
             # random.shuffle(markers)
 
             if use_tsne:
@@ -402,20 +402,21 @@ class Rec2P:
 
                     for i in ix:
 
-                        marker = markers[int(responsive[i].split('_')[0])][0]
+                        marker = markers[int(responsive[i].split("_")[0])][0]
                         ax.scatter(
-                            Xax[i], Yax[i], 
+                            Xax[i],
+                            Yax[i],
                             edgecolor=color,
-                            s=50, 
+                            s=50,
                             marker=marker,
-                            facecolors='none',
-                            alpha=0.8
+                            facecolors="none",
+                            alpha=0.8,
                         )
 
-                ax.set_xlabel("%s 1"%algo, fontsize=9)
-                ax.set_ylabel("%s 2"%algo, fontsize=9)
+                ax.set_xlabel("%s 1" % algo, fontsize=9)
+                ax.set_ylabel("%s 2" % algo, fontsize=9)
 
-                ax.set_title("%d ROIs (n=%d)"%(len(Xax),len(self.recs)))
+                ax.set_title("%d ROIs (n=%d)" % (len(Xax), len(self.recs)))
 
             else:
 
@@ -437,42 +438,43 @@ class Rec2P:
                     ix = np.where(labels == l)[0]
                     # ax.scatter(
                     #     Xax[ix], Yax[ix], Zax[ix], c=clist[l], s=40)
-                    
+
                     for i in ix:
 
-                        marker = markers[int(responsive[i].split('_')[0])][0]
+                        marker = markers[int(responsive[i].split("_")[0])][0]
                         ax.scatter(
-                            Xax[i], Yax[i], 
+                            Xax[i],
+                            Yax[i],
                             edgecolor=color,
-                            s=50, 
+                            s=50,
                             marker=marker,
-                            facecolors='none',
-                            alpha=0.8
+                            facecolors="none",
+                            alpha=0.8,
                         )
 
-                ax.set_xlabel("%s 1"%algo, fontsize=9)
-                ax.set_ylabel("%s 2"%algo, fontsize=9)
+                ax.set_xlabel("%s 1" % algo, fontsize=9)
+                ax.set_ylabel("%s 2" % algo, fontsize=9)
                 # ax.set_zlabel("%s 3"%algo, fontsize=9)
 
-                ax.set_title("%d ROIs (n=%d)"%(len(Xax),len(self.recs)))
+                ax.set_title("%d ROIs (n=%d)" % (len(Xax), len(self.recs)))
 
                 # ax.view_init(30, 60)
 
-
         return clusters
-    
+
+
 class Cell2P:
 
     """
     A Cell object to process, analyze and compute statistics
     on a raw fluoressence trace extracted by suite2p from a single ROI.
     The input Rec2P object will not be copied, just referenced.
-    
+
     """
 
     def __init__(self, rec: Rec2P, id: int):
 
-        self.idx = id
+        self.id = id
         self.responsive = None
         self.analyzed_trials = None
 
@@ -497,9 +499,7 @@ class Cell2P:
 
             self.mean_baseline = np.mean(
                 self.FrawCorr[
-                    self.params["baseline_indices"][0] : self.params[
-                        "baseline_indices"
-                    ][1]
+                    self.params["baseline_indices"][0] : self.params["baseline_indices"][1]
                 ]
             )
 
@@ -512,61 +512,69 @@ class Cell2P:
         else:
 
             self.mean_baseline = np.mean(self.FrawCorr[: rec.sync.sync_frames[0]])
-
             self.dff = (self.FrawCorr - self.mean_baseline) / self.mean_baseline
-
             self.dff_baseline = self.dff[: rec.sync.sync_frames[0]]
 
         # z-score and filter spikes
         self.zspks = np.where(
-                        abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
-                    )
+            abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
+        )
 
     def _compute_QI_(self, trials: np.ndarray):
 
         """
-        Calculate response quality index as defined by 
+        Calculate response quality index as defined by
         Baden et al. over a matrix with shape (reps,time).
         """
+        if self.params["qi_metrics"] == 0:
+                
+            a = np.var(trials.mean(axis=0))
+            b = np.mean(trials.var(axis=1))
+            return a / b
+        
+        else:
 
-        a = np.var(trials.mean(axis=0))
-        b = np.mean(trials.var(axis=1))
+            n = trials.shape[0]
+            mean = np.mean(trials, axis=0)
+            pre = mean[:self.params["pre_trial"]]
+            post = mean[self.params["pre_trial"]:]
+            pvalue = ttest_ind(pre,post)[1]
+            # adjust pvalue using Sidak correction
+            pvalue_corr = 1-(1-pvalue)**n
+            return pvalue_corr
 
-        return a / b
+    def _compute_rmi_(self, a, b, mode="auc"):
 
-    def _compute_rmi_(self,a, b, mode='auc'):
-
-        if mode == 'auc':
+        if mode == "auc":
 
             a_ = trapz(abs(a), dx=1)
             b_ = trapz(abs(b), dx=1)
 
-        elif mode == 'peak':
+        elif mode == "peak":
 
             a_ = np.max(abs(a))
             b_ = np.max(abs(b))
-        
 
         rmi = (a_ - b_) / (a_ + b_)
 
         return rmi
-    
-    def _compute_snr_imp_(self,a, b):
 
-        '''
+    def _compute_snr_imp_(self, a, b):
+
+        """
         Extract noise and signal components from each signal,
         compute SNR and return ration between SNRs
-        '''
-        
-        a_s = filter(a,0.2,btype="low")
-        a_n = filter(a,0.2,btype="high")
-        snr_a = abs(np.mean(a_s)/np.std(a_n))
+        """
 
-        b_s = filter(b,0.2,btype="low")
-        b_n = filter(b,0.2,btype="high")
-        snr_b = abs(np.mean(b_s)/np.std(b_n))
+        a_s = filter(a, 0.2, btype="low")
+        a_n = filter(a, 0.2, btype="high")
+        snr_a = abs(np.mean(a_s) / np.std(a_n))
 
-        return snr_a/snr_b,snr_a,snr_b
+        b_s = filter(b, 0.2, btype="low")
+        b_n = filter(b, 0.2, btype="high")
+        snr_b = abs(np.mean(b_s) / np.std(b_n))
+
+        return snr_a / snr_b, snr_a, snr_b
 
     def analyze(self):
 
@@ -594,7 +602,8 @@ class Cell2P:
         """
 
         analyzed_trials = {}
-        best_qi = 0
+        if self.params["qi_metrics"]==0: best_qi = 0
+        else: best_qi = 1
 
         for stim in self.stims_names:
 
@@ -606,13 +615,13 @@ class Cell2P:
                 mean_baseline = np.mean(
                     self.FrawCorr[
                         self.sync[stim]["stim_window"][0]
-                        - self.params["baseline_frames"] : self.sync[stim][
-                            "stim_window"
-                        ][0]
+                        - self.params["baseline_frames"] : self.sync[stim]["stim_window"][0]
                     ]
                 )
 
-            for trial_type in list(self.sync[stim].keys())[:-1]:  # last item is stim_window
+            for trial_type in list(self.sync[stim].keys())[
+                :-1
+            ]:  # last item is stim_window
 
                 trials_dff = []
                 trials_spks = []
@@ -675,11 +684,17 @@ class Cell2P:
                 trials_zspks = np.array(trials_zspks)
 
                 # calculate QI over df/f traces
-                qi = self._compute_QI_(filter(trials_dff, 0.3))
+                qi = self._compute_QI_(z_norm(filter(trials_dff, 0.3)))
 
-                if qi>best_qi: 
+                if self.params["qi_metrics"]==0:
+                
+                    if qi > best_qi:
+                        best_qi = qi
 
-                    best_qi=qi
+                else:
+
+                    if qi < best_qi:
+                        best_qi = qi
 
                 on = self.params["pre_trial"]
                 off = self.params["pre_trial"] + trial_len
@@ -707,44 +722,57 @@ class Cell2P:
 
         return analyzed_trials
 
-    def is_responsive(self, qi_threshold=None):
+    def is_responsive(self):
 
         """
         Asses responsiveness according to the QI value and the criteria specified in params
         """
 
-        if qi_threshold == None:
-
-            qi_threshold = self.params["qi_threshold"]
-
-        qis_stims = []
-
-        for stim in self.analyzed_trials:
-
-            qis_trials = []
-
-            for trial_name in self.analyzed_trials[stim]:
-
-                qis_trials.append(self.analyzed_trials[stim][trial_name]["QI"])
-
-            # for each stimulus, consider only the highest QI calculated
-            # over all the different trial types (i.e. Ipsi, Both, Contra)
-            qis_stims.append(max(qis_trials))
-
-        # evaluate the responsiveness according to the criteria defined in the config file
         if self.params["resp_criteria"] == 1:
 
-            responsive = all(qi >= qi_threshold for qi in qis_stims)
+            qis_stims = []
+
+            for stim in self.analyzed_trials:
+
+                qis_trials = []
+
+                for trial_name in self.analyzed_trials[stim]:
+
+                    qis_trials.append(self.analyzed_trials[stim][trial_name]["QI"])
+
+                # for each stimulus, consider only the highest QI calculated
+                # over all the different trial types (i.e. Ipsi, Both, Contra)
+                qis_stims.append(max(qis_trials))
+
+            if self.params["qi_metrics"]==0:
+                responsive = any(qi >= self.params["qi_threshold"] for qi in qis_stims)
+
+            else:
+                responsive = any(qi <= 0.05 for qi in qis_stims)
 
         else:
 
-            responsive = any(qi >= qi_threshold for qi in qis_stims)
+            if self.params["qi_metrics"]==0:
+                responsive = (self.qi >= self.params["qi_threshold"])
+
+            else:
+                responsive = (self.qi <= 0.05)
+
+
+        # # evaluate the responsiveness according to the criteria defined in the config file
+        # if self.params["resp_criteria"] == 1:
+
+        #     responsive = all(qi >= qi_threshold for qi in qis_stims)
+
+        # else:
+
+        #     responsive = any(qi >= qi_threshold for qi in qis_stims)
 
         self.responsive = responsive
 
         return responsive
 
-    def calculate_modulation(self, stim, trial_name_1, trial_name_2, mode='rmi'):
+    def calculate_modulation(self, stim, trial_name_1, trial_name_2, mode="rmi"):
 
         """
         Calculate Response Modulation Index on averaged responses to
@@ -766,17 +794,17 @@ class Cell2P:
         average_resp_1 = self.analyzed_trials[stim][trial_name_1]["average_dff"]
         average_resp_2 = self.analyzed_trials[stim][trial_name_2]["average_dff"]
 
-        if mode=='rmi':
+        if mode == "rmi":
 
             mod = self._compute_rmi_(average_resp_1, average_resp_2)
 
-        elif mode=='snr':
+        elif mode == "snr":
 
             mod = self._compute_snr_imp_(average_resp_1, average_resp_2)
 
         return mod
 
-    def calculate_random_modulation(self, stim, trial_name, n_shuff=100, mode='rmi'):
+    def calculate_random_modulation(self, stim, trial_name, n_shuff=100, mode="rmi"):
 
         """
         Quintify the intrinsic variability in the responses generated by
@@ -800,8 +828,8 @@ class Cell2P:
             shuff_trials_idx = np.arange(n_trials)
             random.shuffle(shuff_trials_idx)
 
-            shuff_trials_idx_a = shuff_trials_idx[: int(n_trials/2)]
-            shuff_trials_idx_b = shuff_trials_idx[int(n_trials/2) :]
+            shuff_trials_idx_a = shuff_trials_idx[: int(n_trials / 2)]
+            shuff_trials_idx_b = shuff_trials_idx[int(n_trials / 2) :]
 
             trials_a = []
 
@@ -819,7 +847,9 @@ class Cell2P:
                     self.analyzed_trials[stim][trial_name]["trials_dff"][trial]
                 )
 
-            shuff_mods.append(self._compute_rmi_(np.mean(trials_a,axis=0),np.mean(trials_b,axis=0)))
+            shuff_mods.append(
+                self._compute_rmi_(np.mean(trials_a, axis=0), np.mean(trials_b, axis=0))
+            )
 
             # for trial_a, trial_b in zip(shuff_trials_idx_a,shuff_trials_idx_b):
 
@@ -841,12 +871,13 @@ class Cell2P:
 
         return shuff_controls
 
+
 class Batch2P:
 
     """
     Class for performing batch analysis of multiple recordings.
-    All the recordings contained in a Batch2P object must share at 
-    least one stimulation condidition with at least one common trial 
+    All the recordings contained in a Batch2P object must share at
+    least one stimulation condition with at least one common trial
     type (e.g. CONTRA, BOTH or IPSI)
 
     """
@@ -865,7 +896,7 @@ class Batch2P:
             A dictionary for assigning each recording to a group. This is useful for keeping
             joint analysis of recordings performed in different conditions (e.g. control and treated).
             The keys of the dictionary must be the same as data_dict (datapaths), and the values int numbers.
-            By thefault, all recordings loaded are assigned to group 0.
+            By default, all recordings loaded are assigned to group 0.
         """
 
         # be sure that the sync object of all the recordings share at least 1 stimulus.
@@ -894,10 +925,12 @@ class Batch2P:
             for sync in list(data_dict.values())[1:]:
 
                 # last item is "window_len"
-                trials_intersection.intersection(set(list(sync.sync_ds[stim].keys())[:-1]))
+                trials_intersection.intersection(
+                    set(list(sync.sync_ds[stim].keys())[:-1])
+                )
 
-            self.stims_trials_intersection |= {stim:list(trials_intersection)}
-    
+            self.stims_trials_intersection |= {stim: list(trials_intersection)}
+
         # generate params.yaml
         generate_params_file()
 
@@ -914,7 +947,7 @@ class Batch2P:
                 group_id = groups[data_path]
 
             rec = Rec2P(data_path, sync)
-            self.recs |= {rec_id:(rec,group_id)}
+            self.recs |= {rec_id: (rec, group_id)}
 
         self.cells = None
 
@@ -922,25 +955,25 @@ class Batch2P:
 
         """
         Read parameters from .yaml params file
-        
+
         """
 
         for rec in self.recs:
 
             rec.load_params()
-        
+
     def get_cells(self):
 
         """
         Extract all the cells from the individual recordings and assign new ids.
         Id is in the form G_R_C, where G,R and C are int which specify the group,
         the recording and the cell ids.
-        
+
         """
 
         self.cells = {}
 
-        for (rec_id,value) in self.recs.items():
+        for (rec_id, value) in self.recs.items():
 
             rec = value[0]
             group_id = value[1]
@@ -948,14 +981,13 @@ class Batch2P:
             # retrive cells for each recording
             rec.get_cells()
 
-            for (cell_id,cell) in rec.cells.items():
+            for (cell_id, cell) in rec.cells.items():
 
                 # new id
-                new_id = "%s_%s_%s"%(str(group_id),str(rec_id),str(cell_id))
-                self.cells |= {new_id:cell}
+                new_id = "%s_%s_%s" % (str(group_id), str(rec_id), str(cell_id))
+                self.cells |= {new_id: cell}
                 # update cell id
-                cell.idx = new_id
-
+                cell.id = new_id
 
         return self.cells
 
@@ -963,7 +995,7 @@ class Batch2P:
 
         """
         Get a list containing the ids of all the responsive cells
-        
+
         """
 
         ids = []
@@ -975,23 +1007,23 @@ class Batch2P:
                 ids.append(cell)
 
         return ids
-    
+
     def compute_fingerprints(
-        self,
-        stim_trials_dict=None,
-        type="dff",
-        normalize="z",
+        self, 
+        stim_trials_dict=None, 
+        type="dff", 
+        normalize="z", 
         smooth=True
-        ):
+    ):
 
         """
         Compute a fingerprint for each cell by concatenating the average responses
         to the specified stimuli and trials.
 
         - stim_trials_dict: dict
-            A dict which specifies which stim and which trials to concatenate for computing 
+            A dict which specifies which stim and which trials to concatenate for computing
             the fingerptint.
-            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
+            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid
             stim name and [t1,...,tn] is a list of valid trials for that stim.
         """
 
@@ -1003,7 +1035,7 @@ class Batch2P:
 
         if stim_trials_dict == None:
 
-            stim_trials_dict = {stim:[] for stim in self.stims_trials_intersection}
+            stim_trials_dict = {stim: [] for stim in self.stims_trials_intersection}
 
         responsive = self.get_responsive()
 
@@ -1018,7 +1050,7 @@ class Batch2P:
 
             concat_stims = []
 
-            for (stim,trials_names) in stim_trials_dict.items():
+            for (stim, trials_names) in stim_trials_dict.items():
 
                 if not trials_names:
 
@@ -1026,23 +1058,23 @@ class Batch2P:
 
                 for trial_name in trials_names:
 
-                    r = average_resp[stim][trial_name]["average_%s"%type]
+                    r = average_resp[stim][trial_name]["average_%s" % type]
 
                     # cut the responses
-                    start = average_resp[stim][trial_name]['window'][0]
-                    stop = average_resp[stim][trial_name]['window'][1]
+                    start = average_resp[stim][trial_name]["window"][0]
+                    stop = average_resp[stim][trial_name]["window"][1]
 
-                    r = r[start:int(stop+start/2)]
+                    r = r[start : int(stop + start / 2)]
 
                     if smooth:
-                        # low-pass filter 
-                        r = filter(r,0.1)
-                    
+                        # low-pass filter
+                        r = filter(r, 0.3)
+
                     concat_stims = np.concatenate((concat_stims, r))
 
             if normalize == "lin":
 
-                concat_stims = lin_norm(concat_stims,-1,1)
+                concat_stims = lin_norm(concat_stims, -1, 1)
 
             elif normalize == "z":
 
@@ -1055,7 +1087,7 @@ class Batch2P:
 
         # convert to array
         fingerprints = np.array(fingerprints)
-        
+
         ## NB: index consistency between fingerprints array and list from get_responsive() is important here!
 
         return fingerprints
@@ -1068,47 +1100,47 @@ class Batch2P:
         type="dff",
         normalize="lin",
         plot=True,
-        ):
+    ):
 
         """
-        Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
+         Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
 
-        - stim_trials_dict: dict
-            A dict which specifies which stim and which trials to concatenate for computing 
-            the fingerptint.
-            Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid 
-            stim name and [t1,...,tn] is a list of valid trials for that stim.
-       - n_clusters: int
-            Number of cluster to use for k means clustering
-        - use_tsne: bool
-            wether to compute tsne embedding after PCA decomposition
-        - type: str
-            can be either "dff" or "zspks"
-        - normalize: str
-            'lin': signals will be normalized between 0 and 1 before running PCA
-            'z': signals will be normalized using z score normalization before running PCA
-            otherwise, no normalization will be applied
+         - stim_trials_dict: dict
+             A dict which specifies which stim and which trials to concatenate for computing
+             the fingerptint.
+             Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid
+             stim name and [t1,...,tn] is a list of valid trials for that stim.
+        - n_clusters: int
+             Number of cluster to use for k means clustering
+         - use_tsne: bool
+             wether to compute tsne embedding after PCA decomposition
+         - type: str
+             can be either "dff" or "zspks"
+         - normalize: str
+             'lin': signals will be normalized between 0 and 1 before running PCA
+             'z': signals will be normalized using z score normalization before running PCA
+             otherwise, no normalization will be applied
 
         """
         responsive = self.get_responsive()
 
         # compute fingerprints
-        x = self.compute_fingerprints(stim_trials_dict,type,normalize)
+        x = self.compute_fingerprints(stim_trials_dict, type, normalize)
 
         # embed data
         if use_tsne:
 
-            if len(x)<50:
+            if len(x) < 50:
                 n_comp = len(x)
             else:
                 n_comp = 50
-                
+
             # run PCA
             pca = PCA(n_components=n_comp)
             transformed = pca.fit_transform(x)
-            # run t-SNE 
+            # run t-SNE
             transformed = self.TSNE_embedding(x)
-        
+
         else:
 
             # PCA embedding
@@ -1121,10 +1153,10 @@ class Batch2P:
             n_clusters = find_optimal_kmeans_k(transformed)
 
         # run Kmeans
-        kmeans = KMeans(n_clusters=n_clusters, 
-                        init="k-means++",
-                        algorithm="auto").fit(transformed)
-        
+        kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(
+            transformed
+        )
+
         labels = kmeans.labels_
 
         # retrive clusters
@@ -1144,7 +1176,7 @@ class Batch2P:
         if plot:
 
             clist = list(colors.TABLEAU_COLORS.keys())
-            markers = list(Line2D.markers.items())[2:] 
+            markers = list(Line2D.markers.items())[2:]
             # random.shuffle(markers)
 
             if use_tsne:
@@ -1166,20 +1198,21 @@ class Batch2P:
 
                     for i in ix:
 
-                        marker = markers[int(responsive[i].split('_')[0])][0]
+                        marker = markers[int(responsive[i].split("_")[0])][0]
                         ax.scatter(
-                            Xax[i], Yax[i], 
+                            Xax[i],
+                            Yax[i],
                             edgecolor=color,
-                            s=50, 
+                            s=50,
                             marker=marker,
-                            facecolors='none',
-                            alpha=0.8
+                            facecolors="none",
+                            alpha=0.8,
                         )
 
-                ax.set_xlabel("%s 1"%algo, fontsize=9)
-                ax.set_ylabel("%s 2"%algo, fontsize=9)
+                ax.set_xlabel("%s 1" % algo, fontsize=9)
+                ax.set_ylabel("%s 2" % algo, fontsize=9)
 
-                ax.set_title("%d ROIs (n=%d)"%(len(Xax),len(self.recs)))
+                ax.set_title("%d ROIs (n=%d)" % (len(Xax), len(self.recs)))
 
             else:
 
@@ -1201,27 +1234,27 @@ class Batch2P:
                     ix = np.where(labels == l)[0]
                     # ax.scatter(
                     #     Xax[ix], Yax[ix], Zax[ix], c=clist[l], s=40)
-                    
+
                     for i in ix:
 
-                        marker = markers[int(responsive[i].split('_')[0])][0]
+                        marker = markers[int(responsive[i].split("_")[0])][0]
                         ax.scatter(
-                            Xax[i], Yax[i], 
+                            Xax[i],
+                            Yax[i],
                             edgecolor=color,
-                            s=50, 
+                            s=50,
                             marker=marker,
-                            facecolors='none',
-                            alpha=0.8
+                            facecolors="none",
+                            alpha=0.8,
                         )
 
-                ax.set_xlabel("%s 1"%algo, fontsize=9)
-                ax.set_ylabel("%s 2"%algo, fontsize=9)
+                ax.set_xlabel("%s 1" % algo, fontsize=9)
+                ax.set_ylabel("%s 2" % algo, fontsize=9)
                 # ax.set_zlabel("%s 3"%algo, fontsize=9)
 
-                ax.set_title("%d ROIs (n=%d)"%(len(Xax),len(self.recs)))
+                ax.set_title("%d ROIs (n=%d)" % (len(Xax), len(self.recs)))
 
                 # ax.view_init(30, 60)
-
 
         return clusters
 
@@ -1230,45 +1263,47 @@ class Batch2P:
 ###---UTILITY FUNCTIONS---###
 #############################
 
+
 def generate_params_file():
 
-        """
-        Generate a parameters file in the current working dir.
-        This file contains a list of all the parameters that will used for the downsteream analysis,
-        set to a default value.
-        """
+    """
+    Generate a parameters file in the current working dir.
+    This file contains a list of all the parameters that will used for the downsteream analysis,
+    set to a default value.
+    """
 
-        files = os.listdir(os.getcwd())
+    files = os.listdir(os.getcwd())
 
-        if "params.yaml" not in files:
+    if "params.yaml" not in files:
 
-            print("> Config file generated. All parameters set to default.")
+        print("> Config file generated. All parameters set to default.")
 
-            return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
+        return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
 
-        else:
+    else:
 
-            print("> Using the parameters file found in data_path.")
+        print("> Using the parameters file found in data_path.")
 
-            return "params.yaml"
-  
-def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode='filtfilt'):
+        return "params.yaml"
+
+
+def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
 
     """
     Apply scipy's filtfilt to signal s.
     """
 
     b, a = butter(ord, wn, btype, analog, fs=fs)
-    
-    if mode=='filtfilt':
+
+    if mode == "filtfilt":
         s_filtered = filtfilt(b, a, s)
-    elif mode=='sosfiltfilt':
+    elif mode == "sosfiltfilt":
         s_filtered = sosfiltfilt(b, a, s)
-    elif mode=='lfilter':
+    elif mode == "lfilter":
         s_filtered = lfilter(b, a, s)
 
-
     return s_filtered
+
 
 def z_norm(s, include_zeros=False):
 
@@ -1282,83 +1317,92 @@ def z_norm(s, include_zeros=False):
 
     if include_zeros:
 
-        s_mean = np.mean(s)
-        s_std = np.std(s)
+        if len(s.shape)==1:
 
-        return (s - s_mean) / s_std
+            s_mean = np.mean(s)
+            s_std = np.std(s)
+            return (s - s_mean) / s_std
+        
+        else:
 
-    elif s[s != 0].shape[0] > 1:
+            s_mean = np.mean(s,axis=1)
+            s_std = np.std(s,axis=1)
+            return ((s.T - s_mean) / s_std).T
 
-        s_mean = np.mean(s[s != 0])
-        s_std = np.std(s[s != 0])
+    elif s[s != 0].shape[0] > 1: ### Needs to be fixed!
 
-        return (s - s_mean) / s_std
+        if len(s.shape)==1:
+
+            s_mean = np.mean(s[s != 0])
+            s_std = np.std(s[s != 0])
+            return (s - s_mean) / s_std
+        
+        else:
+            
+            s_mean = np.nanmean(np.where(s!=0,s,np.nan),1)
+            s_std = np.nanstd(np.where(s!=0,s,np.nan),1)
+            return ((s.T - s_mean) / s_std).T
 
     return np.zeros(s.shape)
+
 
 def lin_norm(s, lb=0, ub=1):
 
     """
     Compute linear normalization between lb and ub on input signal s
     """
-    return (ub-lb)*((s - s.min()) / (s.max() - s.min()))+lb
+    return (ub - lb) * ((s - s.min()) / (s.max() - s.min())) + lb
 
-def TSNE_embedding(
-    data=None,
-    **kwargs
-    ):
 
-    if len(data)<50:           
+def TSNE_embedding(data=None, **kwargs):
+
+    if len(data) < 50:
         n_comp = len(data)
     else:
         n_comp = 50
-    
+
     if kwargs:
         tsne_params = kwargs
-    else: 
+    else:
         tsne_params = {
-            'n_components':2, 
-            'verbose':1, 
-            'metric':'cosine', 
-            'early_exaggeration':4, 
-            'perplexity':15, 
-            'n_iter':2000, 
-            'init':'pca', 
-            'angle':0.1}
+            "n_components": 2,
+            "verbose": 1,
+            "metric": "cosine",
+            "early_exaggeration": 4,
+            "perplexity": 15,
+            "n_iter": 2000,
+            "init": "pca",
+            "angle": 0.1,
+        }
     # run PCA
     pca = PCA(n_components=n_comp)
     transformed = pca.fit_transform(data)
     # run t-SNE
     tsne = TSNE(**tsne_params)
-    
+
     transformed = tsne.fit_transform(transformed)
 
     return transformed
 
-def k_means(
-    data,
-    n_clusters
-):
+
+def k_means(data, n_clusters):
 
     # run Kmeans
-    kmeans = KMeans(n_clusters=n_clusters, 
-                    init="k-means++",
-                    algorithm="auto").fit(data)
-    
+    kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(data)
+
     return kmeans.labels_
 
-def GMM( 
-    data,
-    **kwargs
-):
-    
+
+def GMM(data, **kwargs):
+
     # run Gaussian Mixture Model
     gmm = BayesianGaussianMixture(**kwargs)
     gm_labels = gmm.fit_predict(data)
-    
+
     print(gmm.converged_)
     return gm_labels
-    
+
+
 def find_optimal_kmeans_k(x):
 
     """
@@ -1408,7 +1452,8 @@ def find_optimal_kmeans_k(x):
     elbow = np.argmax(dcurv)
 
     return round(x_plot[elbow])
-    
+
+
 def check_len_consistency(sequences):
 
     """
@@ -1435,5 +1480,3 @@ def check_len_consistency(sequences):
         sequences_new.append(sequence[:min_len])
 
     return sequences_new
-
-    
