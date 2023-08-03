@@ -19,6 +19,7 @@ from matplotlib import colors
 from matplotlib.lines import Line2D
 
 from .sync import Sync
+from .utils import *
 
 pathlib.Path(__file__).parent.resolve()
 
@@ -158,13 +159,10 @@ class Rec2P:
             if self.params["use_iscell"]:
 
                 idxs_cells = np.where(self.iscell[:, 0] == 1)[0]
-            #  n_cells = int(np.sum(self.iscell[:,0]))
-
         else:
 
             idxs_cells = np.arange(0, n)
-            # n_cells = n
-
+            
         for id in tqdm(idxs_cells):
 
             if self.params["use_iscell"]:
@@ -906,7 +904,8 @@ class Batch2P:
 
         stims_allrec = [sync.stims_names for sync in data_dict.values()]
 
-        stims_intersection = set(stims_allrec[0])
+        # start from minimal stim set
+        stims_intersection = set(stims_allrec[np.argmin([len(s) for s in stims_allrec])])
 
         for stims in stims_allrec[1:]:
 
@@ -1258,225 +1257,3 @@ class Batch2P:
 
         return clusters
 
-
-#############################
-###---UTILITY FUNCTIONS---###
-#############################
-
-
-def generate_params_file():
-
-    """
-    Generate a parameters file in the current working dir.
-    This file contains a list of all the parameters that will used for the downsteream analysis,
-    set to a default value.
-    """
-
-    files = os.listdir(os.getcwd())
-
-    if "params.yaml" not in files:
-
-        print("> Config file generated. All parameters set to default.")
-
-        return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
-
-    else:
-
-        print("> Using the parameters file found in data_path.")
-
-        return "params.yaml"
-
-
-def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
-
-    """
-    Apply scipy's filtfilt to signal s.
-    """
-
-    b, a = butter(ord, wn, btype, analog, fs=fs)
-
-    if mode == "filtfilt":
-        s_filtered = filtfilt(b, a, s)
-    elif mode == "sosfiltfilt":
-        s_filtered = sosfiltfilt(b, a, s)
-    elif mode == "lfilter":
-        s_filtered = lfilter(b, a, s)
-
-    return s_filtered
-
-
-def z_norm(s, include_zeros=False):
-
-    """
-    Compute z-score normalization on signal s
-    """
-
-    if not isinstance(s, np.ndarray):
-
-        s = np.array(s)
-
-    if include_zeros:
-
-        if len(s.shape)==1:
-
-            s_mean = np.mean(s)
-            s_std = np.std(s)
-            return (s - s_mean) / s_std
-        
-        else:
-
-            s_mean = np.mean(s,axis=1)
-            s_std = np.std(s,axis=1)
-            return ((s.T - s_mean) / s_std).T
-
-    elif s[s != 0].shape[0] > 1: ### Needs to be fixed!
-
-        if len(s.shape)==1:
-
-            s_mean = np.mean(s[s != 0])
-            s_std = np.std(s[s != 0])
-            return (s - s_mean) / s_std
-        
-        else:
-            
-            s_mean = np.nanmean(np.where(s!=0,s,np.nan),1)
-            s_std = np.nanstd(np.where(s!=0,s,np.nan),1)
-            return ((s.T - s_mean) / s_std).T
-
-    return np.zeros(s.shape)
-
-
-def lin_norm(s, lb=0, ub=1):
-
-    """
-    Compute linear normalization between lb and ub on input signal s
-    """
-    return (ub - lb) * ((s - s.min()) / (s.max() - s.min())) + lb
-
-
-def TSNE_embedding(data=None, **kwargs):
-
-    if len(data) < 50:
-        n_comp = len(data)
-    else:
-        n_comp = 50
-
-    if kwargs:
-        tsne_params = kwargs
-    else:
-        tsne_params = {
-            "n_components": 2,
-            "verbose": 1,
-            "metric": "cosine",
-            "early_exaggeration": 4,
-            "perplexity": 15,
-            "n_iter": 2000,
-            "init": "pca",
-            "angle": 0.1,
-        }
-    # run PCA
-    pca = PCA(n_components=n_comp)
-    transformed = pca.fit_transform(data)
-    # run t-SNE
-    tsne = TSNE(**tsne_params)
-
-    transformed = tsne.fit_transform(transformed)
-
-    return transformed
-
-
-def k_means(data, n_clusters):
-
-    # run Kmeans
-    kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(data)
-
-    return kmeans.labels_
-
-
-def GMM(data, **kwargs):
-
-    # run Gaussian Mixture Model
-    gmm = BayesianGaussianMixture(**kwargs)
-    gm_labels = gmm.fit_predict(data)
-
-    print(gmm.converged_)
-    return gm_labels
-
-
-def find_optimal_kmeans_k(x):
-
-    """
-    Find the optimal number of clusters to use for k-means clustering on x.
-    """
-
-    # find optimal number of cluster for Kmeans
-    Sum_of_squared_distances = []
-
-    K = range(1, 8)
-
-    for k in K:
-
-        kmeans = KMeans(n_clusters=k, init="random").fit(x)
-
-        Sum_of_squared_distances.append(kmeans.inertia_)
-
-        labels = kmeans.labels_
-
-    def _monoExp_(x, m, t, b):
-        return m * np.exp(-t * x) + b
-
-    x = np.arange(1, 8)
-
-    p0 = (200, 0.1, 50)  # start with values near those we expect
-
-    p, cv = curve_fit(_monoExp_, x, Sum_of_squared_distances, p0)
-
-    m, t, b = p
-
-    x_plot = np.arange(1, 8, 0.01)
-
-    fitted_curve = _monoExp_(x_plot, m, t, b)
-
-    # find the elbow point
-    xx_t = np.gradient(x_plot)
-
-    yy_t = np.gradient(fitted_curve)
-
-    curvature_val = (
-        np.abs(xx_t * fitted_curve - x_plot * yy_t)
-        / (x_plot * x_plot + fitted_curve * fitted_curve) ** 1.5
-    )
-
-    dcurv = np.gradient(curvature_val)
-
-    elbow = np.argmax(dcurv)
-
-    return round(x_plot[elbow])
-
-
-def check_len_consistency(sequences):
-
-    """
-    Utility function for correcting for length inconsistency in a list of 1-D iterables.
-    It finds the size of the shortes iterable and trim the other iterables accordingly.
-
-    - sequence (list of iterables)
-        list of array-like elements that will be trimmed to the same (minimal) length.
-
-    """
-
-    # find minimal length
-
-    lengths = [len(sequence) for sequence in sequences]
-
-    min_len = np.min(lengths)
-
-    # trim to minimal length
-
-    sequences_new = []
-
-    for sequence in sequences:
-
-        sequences_new.append(sequence[:min_len])
-
-    return sequences_new

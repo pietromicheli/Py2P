@@ -6,16 +6,13 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib import colors
 from matplotlib import cm,patches
-from scipy.stats import sem
-from scipy.integrate import trapz
-from scipy.special import sinc
-from scipy.signal import chirp
 import warnings
-from math import ceil
 from tqdm import tqdm
 
 from .core import *
 from .sync import Sync
+from .plot_stims import *
+from .utils import z_norm, lin_norm
 
 
 TRIALS_C = {
@@ -270,70 +267,12 @@ def draw_full(
 
     return ax, ymax, ymin
 
-def draw_chirp_stim(
-                ax,
-                pad_l = 40,
-                stim_len = None,
-                fr = 15.5):
-
-    pad_left = np.ones(pad_l)*0.5
-    chunk_OFF1 = np.zeros(int(2*fr))
-    chunk_ON = np.ones(int(3*fr))
-    chunk_OFF2 = np.zeros(int(3*fr))
-    BG = np.ones(int(2*fr))*0.5
-    t_fm = np.linspace(0,20,int(8*fr))
-    FM = (chirp(t_fm,0.2,20,1)+1)/2
-    t_am = np.linspace(0,100,int(12*fr))
-    a_am = np.linspace(0.01,0.5,int(12*fr))
-    AM = (np.sin(t_am)*a_am)+0.5
-    
-    stim_conc = np.concatenate([pad_left,chunk_OFF1,chunk_ON,chunk_OFF2,chunk_ON*0.5,
-                                FM,BG,AM,BG,chunk_OFF1,chunk_ON,chunk_OFF1,chunk_ON,chunk_OFF1])
-    
-    pad_right = np.ones((stim_len-len(stim_conc)))*0.5
-    stim_conc = np.concatenate([stim_conc, pad_right])
-
-    ax.plot(stim_conc,c='k')
-    green_x = len(stim_conc)-len(pad_right)-int(8.5*fr)
-    blue_x = len(stim_conc)-len(pad_right)-int(3.5*fr)
-    ax.axvline(green_x, 0, 1, linewidth=13, color='g',alpha=0.3)
-    ax.axvline(blue_x, 0, 1, linewidth=13, color='b',alpha=0.3)
-    
-    ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
-    ax.set_ylabel("brightness")
-
-    return ax
-
-def draw_full_field_stim(
-        ax,
-        pad_l = 40,
-        stim_len = None,
-        fr = 15.5):
-
-    pad_left = np.zeros(pad_l)
-    chunk_1 = np.ones(int(5*fr))
-
-    stim_conc = np.concatenate([pad_left,chunk_1])
-
-    pad_right = np.zeros((stim_len-len(stim_conc)))
-
-    stim_conc = np.concatenate([stim_conc, pad_right])  
-
-    stim_start = len(stim_conc)-len(pad_right)-int(5*fr)
-    stim_end = len(stim_conc)-len(pad_right)
-
-    ax.plot(stim_conc,c='k')
-    ax.axvspan(stim_start, stim_end, color='y', alpha=0.3)
-    ax.set_ylabel("brightness")
-
-    return ax
-
 def draw_heatmap(
-                 matrix, 
-                 vmin, 
-                 vmax,
-                 cb_label="", 
-                 ax=None):
+        matrix, 
+        vmin, 
+        vmax,
+        cb_label="", 
+        ax=None):
 
     """
     Base function for drawing an hetmap from input matrix.
@@ -403,7 +342,7 @@ def plot_multipleStim(
     - full : str
         can be "dff" or "zspks", Fraw or Fneu. If None, full trace will not be plotted
     - order_stims: bool
-        wether to plot order the stimuli subplots or not. the ordering is based on the name.
+        wether to order the stimuli subplots or not. the ordering is based on the name.
     - func_: tuple
         function that will be applied to each signal. first argoument of the function is 
         is assumed to be the signal. Should be in the form:
@@ -588,7 +527,7 @@ def plot_multipleStim(
                     axs_T = axs_T[j]
 
                 try:
-                    func = globals()['draw_%s_stim'%stim]
+                    func = globals()[stim]
                     ## retrive parameters 
                     cell = c
                     if isinstance(c, list):
@@ -606,10 +545,16 @@ def plot_multipleStim(
                             break                
 
                     func(axs_T[0], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
-                
+
+                    axs_T[0].spines[['right', 'top']].set_visible(False)
+                    axs_T[0].set_xticks([])
+                    axs_T[0].set_yticks([])
                     axs_T[0].set_title(stim, fontsize=10)
+
                     axs_T[1].set_title("")   
+
                 except:
+                    axs_T[0].axis('off')
                     warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)                                            
 
             ## set limits
@@ -625,13 +570,15 @@ def plot_multipleStim(
             else: s = 0
             
             if isinstance(axs.T[j], np.ndarray):
+
                 axs_ = axs.T[j]
+                
             else:
                 axs_ = axs.T
 
             for ax in axs_.flatten()[s:e]:
 
-                ax.set_ylim(y_min, y_max)
+                ax.set_ylim(y_min+(y_min/5), y_max+(y_max/5))
 
         if share_y:
 
@@ -663,6 +610,7 @@ def plot_multipleStim(
 def plot_FOV(
         cells_ids,
         rec, 
+        ROIs=True,
         save_path="FOV.png", 
         k=10, 
         img="meanImg"):
@@ -676,7 +624,9 @@ def plot_FOV(
     - rec: Rec2P
         Rec2P object from which the cells have been extracted.
     - k: int
-        value to scale the image luminanca
+        value to scale the image luminance
+    - img: str
+        a valid name of an image stored in stat.npy
 
     '''
 
@@ -690,28 +640,28 @@ def plot_FOV(
 
     plt.figure(figsize=(10,7))
 
-    for i,pop in enumerate(cells_ids):
+    if ROIs:
+        for i,pop in enumerate(cells_ids):
 
-        c = POPS_C[i]
+            c = POPS_C[i]
 
-        for idx in pop:
+            for idx in pop:
 
-            # extract and color ROIs pixels
-           
-            ypix = rec.stat[idx]['ypix']
+                # extract and color ROIs pixels
 
-            xpix = rec.stat[idx]['xpix']
+                ypix = rec.stat[idx]['ypix']
 
-            for x,y in zip(xpix,ypix):
+                xpix = rec.stat[idx]['xpix']
 
-                img_rgb[(y),(x)] = colors.to_rgb(c)
+                for x,y in zip(xpix,ypix):
 
-        plt.plot(0,0,c=c,label='POP_#%d'%i)
+                    img_rgb[(y),(x)] = colors.to_rgb(c)
 
+            plt.plot(0,0,c=c,label='POP_#%d'%i)
+            plt.legend(loc="upper right", bbox_to_anchor=(1.15, 1.0))
 
     plt.imshow(img_rgb, aspect='auto')
     plt.axis('off')
-    plt.legend(loc="upper right", bbox_to_anchor=(1.15, 1.0))
     plt.savefig(save_path, bbox_inches="tight")
     
 def plot_averages_heatmap(
@@ -797,13 +747,13 @@ def plot_averages_heatmap(
             resp = eval("cell."+type)
 
 
-        if normalize == "norm":
+        if normalize == "lin":
 
-            resp = (resp - resp.min()) / (resp.max() - resp.min())
+            resp = lin_norm(resp)
 
         elif normalize == "z":
 
-            resp = _z_norm_(resp, True)
+            resp = z_norm(resp, True)
 
 
         resp_all.append(resp)
@@ -920,7 +870,7 @@ def plot_clusters(
         name of the embedding algorithm
     """
 
-    clist = np.array(list(plt.colormaps['tab20'].colors))
+    clist = np.array(POPS_C)
     allmarkers = list(Line2D.markers.items())[2:] 
     # random.shuffle(allmarkers)
     # random.shuffle(clist)
@@ -975,7 +925,9 @@ def plot_clusters(
 
         legend2 = ax.legend((s for s in scatters),
                             ('%s %d'%(groups_name,i) for i in range(len(scatters))),
-                            loc=l2loc)
+                            # loc=l2loc,
+                            bbox_to_anchor=(1.22, 0.2)
+                            )
         ax.add_artist(legend2)
 
     ax.set_xlabel("%s 1"%algo, fontsize=9)
@@ -1115,30 +1067,3 @@ def plot_histogram(
 
     plt.savefig(save_name, bbox_inches='tight')
     plt.close(fig)
-
-# UTILS #
-def _z_norm_(s, include_zeros=False):
-
-    """
-    Compute z-score normalization on signal s
-    """
-
-    if not isinstance(s, np.ndarray):
-
-        s = np.array(s)
-
-    if include_zeros:
-
-        s_mean = np.mean(s)
-        s_std = np.std(s)
-
-        return (s - s_mean) / s_std
-
-    elif s[s != 0].shape[0] > 1:
-
-        s_mean = np.mean(s[s != 0])
-        s_std = np.std(s[s != 0])
-
-        return (s - s_mean) / s_std
-
-    return np.zeros(s.shape)

@@ -1,9 +1,241 @@
-from scipy.signal import convolve
+import os
+import shutil
+from scipy.signal import butter, filtfilt, sosfiltfilt, lfilter
 from scipy.optimize import curve_fit
 from scipy.fftpack import rfft, irfft, rfftfreq
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
+from sklearn.mixture import BayesianGaussianMixture
+from sklearn.decomposition import PCA
+
 import matplotlib.pyplot as plt
 import numpy as np
 from Py2P.core import *
+
+from .core import CONFIG_FILE_TEMPLATE
+
+#############################
+###---UTILITY FUNCTIONS---###
+#############################
+
+
+def generate_params_file():
+
+    """
+    Generate a parameters file in the current working dir.
+    This file contains a list of all the parameters that will used for the downsteream analysis,
+    set to a default value.
+    """
+
+    files = os.listdir(os.getcwd())
+
+    if "params.yaml" not in files:
+
+        print("> Config file generated. All parameters set to default.")
+
+        return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
+
+    else:
+
+        print("> Using the parameters file found in data_path.")
+
+        return "params.yaml"
+
+
+def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
+
+    """
+    Apply scipy's filtfilt to signal s.
+    """
+
+    b, a = butter(ord, wn, btype, analog, fs=fs)
+
+    if mode == "filtfilt":
+        s_filtered = filtfilt(b, a, s)
+    elif mode == "sosfiltfilt":
+        s_filtered = sosfiltfilt(b, a, s)
+    elif mode == "lfilter":
+        s_filtered = lfilter(b, a, s)
+
+    return s_filtered
+
+
+def z_norm(s, include_zeros=False):
+
+    """
+    Compute z-score normalization on signal s
+    """
+
+    if not isinstance(s, np.ndarray):
+
+        s = np.array(s)
+
+    if include_zeros:
+
+        if len(s.shape)==1:
+
+            s_mean = np.mean(s)
+            s_std = np.std(s)
+            return (s - s_mean) / s_std
+        
+        else:
+
+            s_mean = np.mean(s,axis=1)
+            s_std = np.std(s,axis=1)
+            return ((s.T - s_mean) / s_std).T
+
+    elif s[s != 0].shape[0] > 1: ### Needs to be fixed!
+
+        if len(s.shape)==1:
+
+            s_mean = np.mean(s[s != 0])
+            s_std = np.std(s[s != 0])
+            return (s - s_mean) / s_std
+        
+        else:
+            
+            s_mean = np.nanmean(np.where(s!=0,s,np.nan),1)
+            s_std = np.nanstd(np.where(s!=0,s,np.nan),1)
+            return ((s.T - s_mean) / s_std).T
+
+    return np.zeros(s.shape)
+
+
+def lin_norm(s, lb=0, ub=1):
+
+    """
+    Compute linear normalization between lb and ub on input signal s
+    """
+    return (ub - lb) * ((s - s.min()) / (s.max() - s.min())) + lb
+
+
+def TSNE_embedding(data=None, **kwargs):
+
+    if len(data) < 50:
+        n_comp = len(data)
+    else:
+        n_comp = 50
+
+    if kwargs:
+        tsne_params = kwargs
+    else:
+        tsne_params = {
+            "n_components": 2,
+            "verbose": 1,
+            "metric": "cosine",
+            "early_exaggeration": 4,
+            "perplexity": 15,
+            "n_iter": 2000,
+            "init": "pca",
+            "angle": 0.1,
+        }
+    # run PCA
+    pca = PCA(n_components=n_comp)
+    transformed = pca.fit_transform(data)
+    # run t-SNE
+    tsne = TSNE(**tsne_params)
+
+    transformed = tsne.fit_transform(transformed)
+
+    return transformed
+
+
+def k_means(data, n_clusters):
+
+    # run Kmeans
+    kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(data)
+
+    return kmeans.labels_
+
+
+def GMM(data, **kwargs):
+
+    # run Gaussian Mixture Model
+    gmm = BayesianGaussianMixture(**kwargs)
+    gm_labels = gmm.fit_predict(data)
+
+    print(gmm.converged_)
+    return gm_labels
+
+
+def find_optimal_kmeans_k(x):
+
+    """
+    Find the optimal number of clusters to use for k-means clustering on x.
+    """
+
+    # find optimal number of cluster for Kmeans
+    Sum_of_squared_distances = []
+
+    K = range(1, 8)
+
+    for k in K:
+
+        kmeans = KMeans(n_clusters=k, init="random").fit(x)
+
+        Sum_of_squared_distances.append(kmeans.inertia_)
+
+        labels = kmeans.labels_
+
+    def _monoExp_(x, m, t, b):
+        return m * np.exp(-t * x) + b
+
+    x = np.arange(1, 8)
+
+    p0 = (200, 0.1, 50)  # start with values near those we expect
+
+    p, cv = curve_fit(_monoExp_, x, Sum_of_squared_distances, p0)
+
+    m, t, b = p
+
+    x_plot = np.arange(1, 8, 0.01)
+
+    fitted_curve = _monoExp_(x_plot, m, t, b)
+
+    # find the elbow point
+    xx_t = np.gradient(x_plot)
+
+    yy_t = np.gradient(fitted_curve)
+
+    curvature_val = (
+        np.abs(xx_t * fitted_curve - x_plot * yy_t)
+        / (x_plot * x_plot + fitted_curve * fitted_curve) ** 1.5
+    )
+
+    dcurv = np.gradient(curvature_val)
+
+    elbow = np.argmax(dcurv)
+
+    return round(x_plot[elbow])
+
+
+def check_len_consistency(sequences):
+
+    """
+    Utility function for correcting for length inconsistency in a list of 1-D iterables.
+    It finds the size of the shortes iterable and trim the other iterables accordingly.
+
+    - sequence (list of iterables)
+        list of array-like elements that will be trimmed to the same (minimal) length.
+
+    """
+
+    # find minimal length
+
+    lengths = [len(sequence) for sequence in sequences]
+
+    min_len = np.min(lengths)
+
+    # trim to minimal length
+
+    sequences_new = []
+
+    for sequence in sequences:
+
+        sequences_new.append(sequence[:min_len])
+
+    return sequences_new
+
 
 def fit_oscillator(s,fs,plot_ps=False,freq_int=[0.2,0.2]):
 
@@ -62,6 +294,7 @@ def fit_oscillator(s,fs,plot_ps=False,freq_int=[0.2,0.2]):
 
     return {'f':freq_osc,'fopt':popt[0],'phi':popt[1],'freq_range':freq_range},optSin(t,popt[0],popt[1])
 
+
 def kill_freq(s,fs,f,freq_range,type='bs',lpcut=1.2):
 
     dt = 1/fs
@@ -81,6 +314,7 @@ def kill_freq(s,fs,f,freq_range,type='bs',lpcut=1.2):
     cut_s = filter(cut_s,lpcut,fs=fs)
 
     return cut_s
+
 
 def deoscillate(x,x_train,fs,lpcut=1.2,norm=True,plot=False,freq_int=[0.2,0.2]):
 
