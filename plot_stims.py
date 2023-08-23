@@ -2,7 +2,7 @@ import numpy as np
 from scipy.special import sinc
 from scipy.signal import chirp
 
-def chirp(
+def chirp_stim(
         ax,
         pad_l = 40,
         stim_len = None,
@@ -37,7 +37,7 @@ def chirp(
 
     return ax
 
-def full_field(
+def full_field_stim(
         ax,
         pad_l = 40,
         stim_len = None,
@@ -61,7 +61,7 @@ def full_field(
 
     return ax
 
-def contrast_ramp(
+def contrast_ramp_stim(
     ax,
     pad_l = 40,
     stim_len = None,
