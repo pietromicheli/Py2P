@@ -198,7 +198,6 @@ def draw_full(
         avg = []
 
         for cell in cells:
-
             avg.append(eval("cell."+type))
 
         r = np.mean(avg, axis=0)
@@ -235,7 +234,6 @@ def draw_full(
         xscale = 1
 
     x = np.arange(len(r))/xscale
-
 
     ax.set_title(type)
 
@@ -310,7 +308,8 @@ def plot_multipleStim(
     trials=None,
     type="dff",
     func_=None,
-    full = "dff",
+    full="dff",
+    qi_threshold=0,
     plot_stim =True,
     order_stims=True,
     group_trials=True,
@@ -421,6 +420,11 @@ def plot_multipleStim(
             
             fig.suptitle("ROI #%s   QI:%.2f"%(c.id,c.qi))
 
+            # plot only the cells with qi above qi_threshold
+            if c.qi < qi_threshold:
+                plt.close(fig)
+                break
+
 
         if not isinstance(axs, np.ndarray):
 
@@ -527,7 +531,7 @@ def plot_multipleStim(
                     axs_T = axs_T[j]
 
                 try:
-                    func = globals()[stim]
+                    func = globals()["%s_stim"%stim]
                     ## retrive parameters 
                     cell = c
                     if isinstance(c, list):
@@ -608,56 +612,61 @@ def plot_multipleStim(
             plt.close(fig)
     
 def plot_FOV(
+        rec,
         cells_ids,
-        rec, 
-        ROIs=True,
         save_path="FOV.png", 
-        k=10, 
+        k=None, 
         img="meanImg"):
 
     '''
     Plot mean image of the FOV with masks of the passed cells.
     If cells_ids is list of lists, each sublist will be considered as a population.
 
-    - cells: list 
-        list or list of lists of Cell2P objects.
     - rec: Rec2P
         Rec2P object from which the cells have been extracted.
+    - cells: list 
+        list of valid cells ids
     - k: int
-        value to scale the image luminance
+        value to scale the image luminance. 
+        If None, the brightness is automatically adjusted
     - img: str
         a valid name of an image stored in stat.npy
 
     '''
 
-    if not isinstance(cells_ids, list):
-
-        cells_ids = [cells_ids]
-
     mean_img = rec.ops.item()[img]
 
-    img_rgb = ((np.stack([mean_img,mean_img,mean_img],axis=2)-np.min(mean_img))/np.max((mean_img-np.min(mean_img))))*k
+    img_rgb = ((np.stack([mean_img,mean_img,mean_img],axis=2)-np.min(mean_img))/np.max((mean_img-np.min(mean_img))))
+    k = 0.3/np.mean(img_rgb)
+    img_rgb = img_rgb*k
 
     plt.figure(figsize=(10,7))
 
-    if ROIs:
-        for i,pop in enumerate(cells_ids):
+    all_labels = []
 
-            c = POPS_C[i]
+    if cells_ids != None:
+        # for i,pop in enumerate(cells_ids):
+        for idx in cells_ids:
 
-            for idx in pop:
+            # c = POPS_C[i]
+            pop = rec.cells[idx].label
+            all_labels.append(pop)
+            c = POPS_C[pop]
 
-                # extract and color ROIs pixels
+            # for idx in pop:
 
-                ypix = rec.stat[idx]['ypix']
+            # extract and color ROIs pixels
 
-                xpix = rec.stat[idx]['xpix']
+            ypix = rec.stat[idx]['ypix']
 
-                for x,y in zip(xpix,ypix):
+            xpix = rec.stat[idx]['xpix']
 
-                    img_rgb[(y),(x)] = colors.to_rgb(c)
+            for x,y in zip(xpix,ypix):
 
-            plt.plot(0,0,c=c,label='POP_#%d'%i)
+                img_rgb[(y),(x)] = colors.to_rgb(c)
+
+        for pop in set(all_labels):
+            plt.plot(0,0,c=POPS_C[pop],label='POP_#%d'%pop)
             plt.legend(loc="upper right", bbox_to_anchor=(1.15, 1.0))
 
     plt.imshow(img_rgb, aspect='auto')
@@ -866,6 +875,8 @@ def plot_clusters(
     - markers: Array-like
         markers array specifying same values for datapoints you want to draw using the
         same marker.
+    - groups_name: str
+    label prefix for the groups specifyed by the markers. only used if markers is passed
     - algo: str
         name of the embedding algorithm
     """
@@ -924,7 +935,8 @@ def plot_clusters(
     if not singlemarker:
 
         legend2 = ax.legend((s for s in scatters),
-                            ('%s %d'%(groups_name,i) for i in range(len(scatters))),
+                            ('%s %d'%(groups_name,i) for i in np.unique(markers)),
+                            # ('%s %d'%(groups_name,i) for i in range(len(scatters))),
                             # loc=l2loc,
                             bbox_to_anchor=(1.22, 0.2)
                             )
