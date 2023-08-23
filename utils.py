@@ -10,7 +10,7 @@ from sklearn.decomposition import PCA
 
 import matplotlib.pyplot as plt
 import numpy as np
-from Py2P.core import *
+from Py2P.core import CONFIG_FILE_TEMPLATE
 
 #############################
 ###---UTILITY FUNCTIONS---###
