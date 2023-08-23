@@ -12,8 +12,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from Py2P.core import *
 
-from .core import CONFIG_FILE_TEMPLATE
-
 #############################
 ###---UTILITY FUNCTIONS---###
 #############################
@@ -209,14 +207,18 @@ def find_optimal_kmeans_k(x):
     return round(x_plot[elbow])
 
 
-def check_len_consistency(sequences):
+def check_len_consistency(sequences, mode='trim', mean_len=10):
 
     """
     Utility function for correcting for length inconsistency in a list of 1-D iterables.
-    It finds the size of the shortes iterable and trim the other iterables accordingly.
 
-    - sequence (list of iterables)
+    - sequence (list of iterables):
         list of array-like elements that will be trimmed to the same (minimal) length.
+    - mode (str):
+        'trim': finds the size of the shortes iterable and trim the other iterables accordingly.
+        'pad': finds the size of the longest iterable and mean-pad the other iterables accordingly.
+    - mean_len (int):
+        number of values used to calculate the mean used for padding if mode='pad'
 
     """
 
@@ -224,15 +226,29 @@ def check_len_consistency(sequences):
 
     lengths = [len(sequence) for sequence in sequences]
 
-    min_len = np.min(lengths)
+    if mode=='trim':
+        
+        min_len = np.min(lengths)
 
-    # trim to minimal length
+        # trim to minimal length
 
-    sequences_new = []
+        sequences_new = []
 
-    for sequence in sequences:
+        for seq in sequences:
 
-        sequences_new.append(sequence[:min_len])
+            sequences_new.append(seq[:min_len])
+
+    elif mode=='pad':
+
+        max_len = np.max(lengths)
+
+        # trim to minimal length
+
+        sequences_new = []
+
+        for seq in sequences:
+
+            sequences_new.append(np.pad(seq,(len(seq)-max_len),mode='mean',stat_length=mean_len))
 
     return sequences_new
 
