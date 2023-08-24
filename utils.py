@@ -61,7 +61,7 @@ def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
     return s_filtered
 
 
-def z_norm(s, include_zeros=False):
+def z_norm(s, include_zeros=True):
 
     """
     Compute z-score normalization on signal s
@@ -77,30 +77,39 @@ def z_norm(s, include_zeros=False):
 
             s_mean = np.mean(s)
             s_std = np.std(s)
-            return (s - s_mean) / s_std
+            zscored =  (s - s_mean) / s_std
         
         else:
-
             s_mean = np.mean(s,axis=1)
             s_std = np.std(s,axis=1)
-            return ((s.T - s_mean) / s_std).T
+            zscored = ((s.T - s_mean) / s_std).T
 
-    elif s[s != 0].shape[0] > 1: ### Needs to be fixed!
+    elif len(s.shape)==1:
 
-        if len(s.shape)==1:
+        if len(s[s != 0])==0:
 
+            zscored = np.zeros(s.shape)
+
+        else:
             s_mean = np.mean(s[s != 0])
             s_std = np.std(s[s != 0])
-            return (s - s_mean) / s_std
+            zscored = (s - s_mean) / s_std
         
-        else:
+    else:
             
-            s_mean = np.nanmean(np.where(s!=0,s,np.nan),1)
-            s_std = np.nanstd(np.where(s!=0,s,np.nan),1)
-            return ((s.T - s_mean) / s_std).T
+        s_mean = np.nanmean(np.where(s!=0,s,np.nan),1)
+        s_std = np.nanstd(np.where(s!=0,s,np.nan),1)
+        zscored = ((s.T - s_mean) / s_std).T
 
-    return np.zeros(s.shape)
+        # if there is a row containing nan or inf, replace the values with 0
+        if any(np.any(np.isnan(zscored), axis=1)):
 
+            invalid_rows = np.where(np.any(np.isnan(zscored), axis=1)==True)[0]
+            zscored[invalid_rows] = 0
+            print('WARNING: std was 0 in rows: [{}].'
+                  'All values in these rows are setted to 0'.format(*invalid_rows))
+
+    return zscored
 
 def lin_norm(s, lb=0, ub=1):
 
