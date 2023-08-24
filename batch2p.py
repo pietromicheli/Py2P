@@ -250,6 +250,7 @@ class Batch2p:
         save_name='',
         groups_name=None,
         n_components=2,
+        tsne_params=None,
         **kwargs
         ):
 
@@ -281,15 +282,16 @@ class Batch2p:
         elif algo=='tsne':
 
             # if needed, go with Tsne
-            tsne_params =  {
-                    'n_components':2, 
-                    'verbose':1, 
-                    'metric':'cosine', 
-                    'early_exaggeration':4, 
-                    'perplexity':10, 
-                    'n_iter':3000, 
-                    'init':'pca', 
-                    'angle':0.1}
+            if tsne_params==None:
+                tsne_params =  {
+                        'n_components':2, 
+                        'verbose':1, 
+                        'metric':'cosine', 
+                        'early_exaggeration':4, 
+                        'perplexity':10, 
+                        'n_iter':3000, 
+                        'init':'pca', 
+                        'angle':0.1}
 
             transformed = TSNE_embedding(fp,**tsne_params)
 
