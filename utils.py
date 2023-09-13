@@ -1,12 +1,271 @@
-import pywt
-from scipy.signal import convolve
+import os
+import shutil
+import pathlib
+from scipy.signal import butter, filtfilt, sosfiltfilt, lfilter
 from scipy.optimize import curve_fit
 from scipy.fftpack import rfft, irfft, rfftfreq
+from sklearn.manifold import TSNE
+from sklearn.cluster import KMeans
+from sklearn.mixture import BayesianGaussianMixture
+from sklearn.decomposition import PCA
+
 import matplotlib.pyplot as plt
 import numpy as np
-from Py2P.core import *
 
-def fit_oscillator(s,fs,plot_ps=False,freq_int=[0.2,0.2]):
+#############################
+###---UTILITY FUNCTIONS---###
+#############################
+
+CONFIG_FILE_TEMPLATE = r"%s/params.yaml" % pathlib.Path(__file__).parent.resolve()
+DEFAULT_PARAMS = {}
+
+
+def generate_params_file():
+
+    """
+    Generate a parameters file in the current working dir.
+    This file contains a list of all the parameters that will used for the downsteream analysis,
+    set to a default value.
+    """
+
+    files = os.listdir(os.getcwd())
+
+    if "params.yaml" not in files:
+
+        print("> Config file generated. All parameters set to default.")
+
+        return shutil.copy(CONFIG_FILE_TEMPLATE, "params.yaml")
+
+    else:
+
+        print("> Using the parameters file found in data_path.")
+
+        return "params.yaml"
+
+
+def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
+
+    """
+    Apply scipy's filtfilt to signal s.
+    """
+
+    b, a = butter(ord, wn, btype, analog, fs=fs)
+
+    if mode == "filtfilt":
+        s_filtered = filtfilt(b, a, s)
+    elif mode == "sosfiltfilt":
+        s_filtered = sosfiltfilt(b, a, s)
+    elif mode == "lfilter":
+        s_filtered = lfilter(b, a, s)
+
+    return s_filtered
+
+
+def z_norm(s, include_zeros=True):
+
+    """
+    Compute z-score normalization on signal s
+    """
+
+    if not isinstance(s, np.ndarray):
+
+        s = np.array(s)
+
+    if include_zeros:
+
+        if len(s.shape)==1:
+
+            s_mean = np.mean(s)
+            s_std = np.std(s)
+            zscored =  (s - s_mean) / s_std
+        
+        else:
+            s_mean = np.mean(s,axis=1)
+            s_std = np.std(s,axis=1)
+            zscored = ((s.T - s_mean) / s_std).T
+
+    elif len(s.shape)==1:
+
+        if len(s[s != 0])==0:
+
+            zscored = np.zeros(s.shape)
+
+        else:
+            s_mean = np.mean(s[s != 0])
+            s_std = np.std(s[s != 0])
+            zscored = (s - s_mean) / s_std
+        
+    else:
+            
+        s_mean = np.nanmean(np.where(s!=0,s,np.nan),1)
+        s_std = np.nanstd(np.where(s!=0,s,np.nan),1)
+        zscored = ((s.T - s_mean) / s_std).T
+
+        # if there is a row containing nan or inf, replace the values with 0
+        if any(np.any(np.isnan(zscored), axis=1)):
+
+            invalid_rows = np.where(np.any(np.isnan(zscored), axis=1)==True)[0]
+            zscored[invalid_rows] = 0
+            print('WARNING: std was 0 in rows: [{}].'
+                  'All values in these rows are setted to 0'.format(*invalid_rows))
+
+    return zscored
+
+def lin_norm(s, lb=0, ub=1):
+
+    """
+    Compute linear normalization between lb and ub on input signal s
+    """
+    return (ub - lb) * ((s - s.min()) / (s.max() - s.min())) + lb
+
+
+def TSNE_embedding(data=None, **kwargs):
+
+    if len(data) < 50:
+        n_comp = len(data)
+    else:
+        n_comp = 50
+
+    if kwargs:
+        tsne_params = kwargs
+    else:
+        tsne_params = {
+            "n_components": 2,
+            "verbose": 1,
+            "metric": "cosine",
+            "early_exaggeration": 4,
+            "perplexity": 15,
+            "n_iter": 2000,
+            "init": "pca",
+            "angle": 0.1,
+        }
+    # run PCA
+    pca = PCA(n_components=n_comp)
+    transformed = pca.fit_transform(data)
+    # run t-SNE
+    tsne = TSNE(**tsne_params)
+
+    transformed = tsne.fit_transform(transformed)
+
+    return transformed
+
+
+def k_means(data, n_clusters):
+
+    # run Kmeans
+    kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(data)
+
+    return kmeans.labels_
+
+
+def GMM(data, **kwargs):
+
+    # run Gaussian Mixture Model
+    gmm = BayesianGaussianMixture(**kwargs)
+    gm_labels = gmm.fit_predict(data)
+
+    print(gmm.converged_)
+    return gm_labels
+
+
+def find_optimal_kmeans_k(x):
+
+    """
+    Find the optimal number of clusters to use for k-means clustering on x.
+    """
+
+    # find optimal number of cluster for Kmeans
+    Sum_of_squared_distances = []
+
+    K = range(1, 8)
+
+    for k in K:
+
+        kmeans = KMeans(n_clusters=k, init="random").fit(x)
+
+        Sum_of_squared_distances.append(kmeans.inertia_)
+
+        labels = kmeans.labels_
+
+    def _monoExp_(x, m, t, b):
+        return m * np.exp(-t * x) + b
+
+    x = np.arange(1, 8)
+
+    p0 = (200, 0.1, 50)  # start with values near those we expect
+
+    p, cv = curve_fit(_monoExp_, x, Sum_of_squared_distances, p0)
+
+    m, t, b = p
+
+    x_plot = np.arange(1, 8, 0.01)
+
+    fitted_curve = _monoExp_(x_plot, m, t, b)
+
+    # find the elbow point
+    xx_t = np.gradient(x_plot)
+
+    yy_t = np.gradient(fitted_curve)
+
+    curvature_val = (
+        np.abs(xx_t * fitted_curve - x_plot * yy_t)
+        / (x_plot * x_plot + fitted_curve * fitted_curve) ** 1.5
+    )
+
+    dcurv = np.gradient(curvature_val)
+
+    elbow = np.argmax(dcurv)
+
+    return round(x_plot[elbow])
+
+
+def check_len_consistency(sequences, mode='trim', mean_len=10):
+
+    """
+    Utility function for correcting for length inconsistency in a list of 1-D iterables.
+
+    - sequence (list of iterables):
+        list of array-like elements that will be trimmed to the same (minimal) length.
+    - mode (str):
+        'trim': finds the size of the shortes iterable and trim the other iterables accordingly.
+        'pad': finds the size of the longest iterable and mean-pad the other iterables accordingly.
+    - mean_len (int):
+        number of values used to calculate the mean used for padding if mode='pad'
+
+    """
+
+    # find minimal length
+
+    lengths = [len(sequence) for sequence in sequences]
+
+    if mode=='trim':
+        
+        min_len = np.min(lengths)
+
+        # trim to minimal length
+
+        sequences_new = []
+
+        for seq in sequences:
+
+            sequences_new.append(seq[:min_len])
+
+    elif mode=='pad':
+
+        max_len = np.max(lengths)
+
+        # trim to minimal length
+
+        sequences_new = []
+
+        for seq in sequences:
+
+            sequences_new.append(np.pad(seq,(len(seq)-max_len),mode='mean',stat_length=mean_len))
+
+    return sequences_new
+
+
+def fit_oscillator(s, fs, plot_ps=False, freq_int=[0.2,0.2]):
 
     def optSinWrap(freq_osc=None):
         def optSin(x,freq_osc,phi):
@@ -63,7 +322,8 @@ def fit_oscillator(s,fs,plot_ps=False,freq_int=[0.2,0.2]):
 
     return {'f':freq_osc,'fopt':popt[0],'phi':popt[1],'freq_range':freq_range},optSin(t,popt[0],popt[1])
 
-def kill_freq(s,fs,f,freq_range,type='bs',lpcut=1.2):
+
+def kill_freq(s, fs, f, freq_range, type='bs', lpcut=1.2):
 
     dt = 1/fs
 
@@ -83,7 +343,8 @@ def kill_freq(s,fs,f,freq_range,type='bs',lpcut=1.2):
 
     return cut_s
 
-def deoscillate(x,x_train,fs,lpcut=1.2,norm=True,plot=False,freq_int=[0.2,0.2]):
+
+def deoscillate(x, x_train, fs, lpcut=1.2, norm=True, plot=False, freq_int=[0.2,0.2]):
 
     # estimate oscillation frequency from x_train
     # tosc = np.linspace(0,x_train.size/fs,x_train.size)
