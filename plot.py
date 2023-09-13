@@ -9,7 +9,7 @@ from matplotlib import cm,patches
 import warnings
 
 # from .core import *
-from .sync import Sync
+from .core.sync import Sync
 from .plot_stims import *
 from .utils import z_norm, lin_norm, check_len_consistency
 
@@ -110,12 +110,13 @@ def draw_singleStim(
 
         else: 
 
+            r = cell.analyzed_trials[stim][trial]["average_" + type]
+            error = cell.analyzed_trials[stim][trial]["std_" + type]
+
             if func_ != None:
 
                 r = func_[0](r,**func_[1])
-
-            r = cell.analyzed_trials[stim][trial]["average_" + type]
-            error = cell.analyzed_trials[stim][trial]["std_" + type]
+                error = func_[0](error,**func_[1])
 
         if (r + error).max() > ymax:
 
@@ -145,13 +146,13 @@ def draw_singleStim(
             # only draw stim window for first trial
             stim_window = False
 
-        ax.set_xticks(
-            [0, on_frame, off_frame, int(len(r) / cell.params["fr"])]
-        )
+            ax.set_xticks(
+                [0, on_frame, off_frame, int(len(r) / cell.params["fr"])]
+            )
 
-        ax.set_xticklabels(
-            [int(-on_frame), 0, int(off_frame-on_frame), int(len(r) / cell.params["fr"])]
-        )
+            ax.set_xticklabels(
+                [round(-on_frame,1), 0, round(off_frame-on_frame,1), round(len(r) / cell.params["fr"],1)]
+            )
 
         title += " %s"%trial
 
@@ -159,28 +160,28 @@ def draw_singleStim(
         
             if type == "dff":
 
-                ax.set_ylabel("\u0394F/F")
+                ax.set_ylabel("\u0394F/F",fontsize=18)
             
             if type == "spks":
                 
-                ax.set_ylabel("OASIS spikes")
+                ax.set_ylabel("OASIS spikes",fontsize=18)
 
             if type == "zspks":
                 
-                ax.set_ylabel("OASIS spikes (z-score)")
+                ax.set_ylabel("OASIS spikes (z-score)",fontsize=18)
 
-        ax.set_ylabel(ylabel)
+        ax.set_ylabel(ylabel,fontsize=18)
 
-        ax.set_xlabel("time (s)")
+        ax.set_xlabel("time (s)",fontsize=18)
 
         if legend or len(trials)>1:
 
             ax.legend()
-            ax.set_title(stim)
+            ax.set_title(stim,fontsize=18)
 
         else:
 
-            ax.set_title(title)
+            ax.set_title(title,fontsize=18)
 
     ax.spines[['right','top','left','bottom']].set_visible(False)
     ax.grid('dashed',linewidth = 1.5, alpha = 0.25)
@@ -301,7 +302,7 @@ def draw_heatmap(
         cbar=cbar,
         cmap = map,
         cbar_kws=dict(
-            use_gridspec=False, location="bottom", pad=0.05, label=cb_label, aspect=40
+        use_gridspec=False, location="bottom", pad=0.05, label=cb_label, aspect=40
         ),
     )
 
@@ -318,6 +319,7 @@ def plot_multipleStim(
     type="dff",
     func_=None,
     full="dff",
+    stim_window=True,
     ylabel='',
     qi_threshold=0,
     plot_stim =True,
@@ -347,7 +349,7 @@ def plot_multipleStim(
     - trials_names:
         trials to plot
     - type: str
-        can be "dff" or "zspks"
+        can be "raw", "dff", "spks"  or "zspks"
     - full : str
         can be "dff" or "zspks", Fraw or Fneu. If None, full trace will not be plotted
         WARNING: 
@@ -368,7 +370,7 @@ def plot_multipleStim(
         save_path = [save_path]
 
     stims = list(stim_dict.keys())
-    trials = np.unique(list(stim_dict.values())).tolist()
+    trials = list(set([t for stim in stim_dict for t in stim_dict[stim]]))
 
     if order_stims:
 
@@ -422,12 +424,12 @@ def plot_multipleStim(
 
         if average:
 
-            fig.suptitle("Population Average - %d ROIs"%len(c))
+            fig.suptitle("Population Average - %d ROIs"%len(c),fontsize=18)
             sync = c[0].sync
 
         else:
             
-            fig.suptitle("ROI #%s   QI:%.2f"%(c.id,c.qi))
+            fig.suptitle("ROI #%s   QI:%.2f"%(c.id,c.qi),fontsize=18)
             sync = c.sync
 
             # plot only the cells with qi above qi_threshold
@@ -471,8 +473,13 @@ def plot_multipleStim(
                 if len(stims)>1:
 
                     axs_ = axs_[j]
+
+                elif not plot_stim:
+
+                    axs_ = axs_[0]
                                  
-                _, ymax, ymin = draw_singleStim(axs_, c, stim, trials_, type, ylabel=ylabel, func_=func_, legend=legend)
+                _, ymax, ymin = draw_singleStim(axs_, c, stim, trials_, type, ylabel=ylabel, 
+                                                stim_window=stim_window,func_=func_, legend=legend)
 
                 if ymax > y_max: y_max = ymax
 
@@ -492,7 +499,7 @@ def plot_multipleStim(
 
                     axs_T = axs_T[j]
 
-                # trials_ = sorted(stim_dict[stim])
+                trials_ = sorted(stim_dict[stim])
 
                 for i,trial in enumerate(trials_):
 
@@ -501,22 +508,23 @@ def plot_multipleStim(
                         i +=1
 
                     ## make sure to use only trials which exist for a specific stim
-                    # if trial in sync.sync_ds[stim]:
+                    if trial in sync.sync_ds[stim]:
 
-                    _, ymax, ymin = draw_singleStim(axs_T[i], c, stim, trial, type, ylabel=ylabel, func_=func_, legend=legend)
+                        _, ymax, ymin = draw_singleStim(axs_T[i], c, stim, trial, type, ylabel=ylabel,
+                                                        stim_window=stim_window, func_=func_, legend=legend)
 
-                    if ymax > y_max: y_max = ymax
+                        if ymax > y_max: y_max = ymax
 
-                    if ymin < y_min: y_min = ymin
+                        if ymin < y_min: y_min = ymin
 
-                    if i>0: axs_T[i].set_title("")
+                        if i>0: axs_T[i].set_title("")
 
-                else:
-                    
-                    axs_T[i].axis("off")
-                    axs_T[i].set_title("")
+                    else:
+                        
+                        axs_T[i].axis("off")
+                        axs_T[i].set_title("")
 
-                    if i>0: axs_T[i].set_title("")
+                        if i>0: axs_T[i].set_title("")
 
             if full != None:
                 
@@ -571,8 +579,6 @@ def plot_multipleStim(
                     axs_T[0].axis('off')
                     warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)  
                             
-            e = -1
-
             if plot_stim: s = 1
             else: s = 0
             
@@ -583,7 +589,7 @@ def plot_multipleStim(
             else:
                 axs_ = axs.T
 
-            for ax in axs_.flatten()[s:e]:
+            for ax in axs_.flatten()[s:]:
 
                 ax.set_ylim(y_min+(y_min/5), y_max+(y_max/5))
 
@@ -603,15 +609,14 @@ def plot_multipleStim(
 
                     plt.savefig(r"%s/pop_average_%s%s.png" %(path,type,save_suffix), 
                                 bbox_inches="tight")
-
+                    plt.close(fig)
             else:
 
                 for path in save_path:
                 
                     plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.id,type,save_suffix),
                                 bbox_inches="tight")
-
-            plt.close(fig)
+                    plt.close(fig)
     
 def plot_FOV(
         rec,
@@ -679,7 +684,7 @@ def plot_FOV(
     
 def plot_heatmaps(
     cells,
-    stim_dict=None,
+    stim_dict,
     type="dff",
     full=None,
     vmin=None,
@@ -776,37 +781,39 @@ def plot_heatmaps(
 
                     draw_heatmap(resp_all,vmin=vmin,vmax=vmax,cb_label=cb_label,cbar=cbar,ax=ax)
 
+                    # try to plot stimuli
+                    try:
+                        func = globals()["%s_stim"%stim]
+                        
+                        ## retrive parameters 
+                        cell = cells[0]
+                        fr = cell.params["fr"]
+                        pad_l = cell.params["pre_trial"]
+
+                        stim_len = len(resp_all[0])
+
+                        func(axs[0,j], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
+
+                        axs[0,j].spines[['bottom', 'left', 'right', 'top']].set_visible(False)
+                        axs[0,j].grid('dashed',linewidth = 1.5, alpha = 0.25)
+                        axs[0,j].set_xticklabels([])
+                        axs[0,j].set_yticklabels([])
+                        axs[0,j].set_title("")   
+
+                    except:
+                        axs[0,j].axis('off')
+                        warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)
+
                 else:
                     ax.axis("off")
-
-                # try to plot stimuli
-                try:
-                    func = globals()["%s_stim"%stim]
-                    
-                    ## retrive parameters 
-                    cell = cells[0]
-                    fr = cell.params["fr"]
-                    pad_l = cell.params["pre_trial"]
-
-                    stim_len = len(resp_all[0])
-
-                    func(axs[0,j], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
-
-                    axs[0,j].spines[['right', 'top']].set_visible(False)
-                    axs[0,j].set_xticks([])
-                    axs[0,j].set_yticks([])
-
-                except:
-                    axs[0,j].axis('off')
-                    warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)
 
         if len(all_trials)>1:
 
             for ax, trial in zip(axs[1:], all_trials):
-                ax[0].set_ylabel(trial,fontsize=15)
+                ax[0].set_ylabel(trial,fontsize=18)
 
         else:
-            ax[1].set_ylabel(trial,fontsize=15)
+            ax[1].set_ylabel(trial,fontsize=18)
 
     # plot full traces
     else:
@@ -836,12 +843,11 @@ def plot_heatmaps(
         # plot
         draw_heatmap(resp_all,vmin=vmin,vmax=vmax,cb_label=cb_label,ax=ax)
 
-    fig.suptitle("Population Average - %d ROIs"%len(cells), fontsize=15)
+    fig.suptitle("Population Average - %d ROIs"%len(cells), fontsize=18)
 
     if save: 
         plt.savefig(r"%s/%s.png"%(save_path,name), bbox_inches="tight")
-
-    plt.close(fig)
+        plt.close(fig)
     
 def plot_clusters(
     data,
@@ -901,8 +907,8 @@ def plot_clusters(
 
         s = ax.scatter(
             Xax[ix], Yax[ix], 
-            edgecolors=clist[labels[ix]],
-            facecolors=clist[labels[ix]],
+            # edgecolors=clist[labels[ix]],
+            facecolors=clist[labels[ix]]*0.7,
             s=50, 
             marker=marker,
             alpha=0.2,
@@ -912,7 +918,7 @@ def plot_clusters(
 
     p = []
     l = []
-    for i,c in enumerate(clist[np.unique(labels)]):
+    for i,c in enumerate(clist[np.unique(labels)]*0.7):
 
         p.append(patches.Rectangle((0,0),1,1,fc=c))
         l.append("POP %d"%i)
@@ -925,17 +931,22 @@ def plot_clusters(
     ax.add_artist(legend1)
     
     if not singlemarker:
+        import matplotlib.lines as mlines
 
-        legend2 = ax.legend((s for s in scatters),
-                            ('%s %d'%(groups_name,i) for i in np.unique(markers)),
-                            # ('%s %d'%(groups_name,i) for i in range(len(scatters))),
-                            # loc=l2loc,
-                            bbox_to_anchor=(1.22, 0.2)
+        handles = []
+        for m in np.unique(markers):
+            h = mlines.Line2D([], [], marker=m, linestyle='None',
+                          markersize=10, label='%s %d'%(groups_name,i))
+            handles.append(h)
+        
+        legend2 = ax.legend([plt.plot([],[],marker=allmarkers[m][0],color='k', ls="none")[0] for m in np.unique(markers)],
+                            ['%s %d'%(groups_name,i) for i in np.unique(markers)],
+                            bbox_to_anchor=(1.22, 0.2),
                             )
         ax.add_artist(legend2)
 
-    ax.set_xlabel("%s 1"%algo, fontsize=9)
-    ax.set_ylabel("%s 2"%algo, fontsize=9)
+    ax.set_xlabel("%s 1"%algo, fontsize=18)
+    ax.set_ylabel("%s 2"%algo, fontsize=18)
     ax.set_title("%d ROIs"%(len(Xax)))
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -1003,7 +1014,7 @@ def plot_sparse_noise(
             axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c,label=str(cell.analyzed_trials['sparse_noise'][trial]["QI"]<0.05))
             axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
             axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
-            axs[row,col].legend(fontsize="4")
+            axs[row,col].legend(fontsize=9)
             if (row+col)==0:
                 axs[row,col].tick_params(top=True, labeltop=True, bottom=False, labelbottom=False)
 
@@ -1025,6 +1036,8 @@ def plot_sparse_noise(
 def plot_histogram(
     values:dict, 
     control_values=None,
+    bins=None,
+    colors=sns.color_palette('pastel'),
     save_name="hist.png"):
 
     """
@@ -1038,7 +1051,7 @@ def plot_histogram(
 
     """
 
-    fig, axs = plt.subplots(figsize=(15,5),ncols=len(values))
+    fig, axs = plt.subplots(figsize=(10,10),ncols=1)
 
     if not isinstance(axs, np.ndarray):
 
@@ -1046,33 +1059,43 @@ def plot_histogram(
 
     for i, stim in enumerate(values):
 
-        q25, q75 = np.percentile(values[stim], [25, 75])
-        bin_width = 2 * (q75 - q25) * len(values[stim]) ** (-1/3)
-        bins = round((max(values[stim]) - min(values[stim])) / bin_width)
+        if bins == None:
+            q25, q75 = np.percentile(values[stim], [25, 75])
+            bin_width = 2 * (q75 - q25) * len(values[stim]) ** (-1/3)
+            bins = round((max(values[stim]) - min(values[stim])) / bin_width)
 
-        axs[i].set_title(stim, fontsize=12)
-
+        # axs[0].set_title(stim, fontsize=12)
+        norm_values = values[stim]/(values[stim].max())
+        # y, x , _ = axs[0].hist(norm_values,bins=bins,alpha=0.3,edgecolor='black',color=colors[i],
+        #                        label='condition %d'%i, density=True)
+        sns.distplot(values[stim], bins, True, color=colors[i].tolist(), label='condition %d'%i)   
+        
         if control_values != None:
 
             q25, q75 = np.percentile(control_values[stim], [25, 75])
             bin_width = 2 * (q75 - q25) * len(control_values[stim]) ** (-1/3)
             bins = round((max(control_values[stim]) - min(control_values[stim])) / bin_width)
 
-            axs[i].hist(control_values[stim],bins=bins,alpha=0.5,edgecolor='black',color='k')
+            axs[0].hist(control_values[stim],bins=bins,alpha=0.5,edgecolor='black',color='k')
 
-        y, x , _ = axs[i].hist(values[stim],bins=bins,alpha=0.3,edgecolor='black',color='g')          
+        # max_y = np.max(y)
+        # mean_y = np.median(y)
+        # max_y_i = np.argmax(y)
+        # mean_y_i = (np.abs(y - mean_y)).argmin()
+        # max_x = (x[max_y_i]+x[(max_y_i+1)])/2
+        # mean_x =(x[mean_y_i]+x[(mean_y_i+1)])/2
 
-        max_y = np.max(y)
-        mean_y = np.median(y)
-        max_y_i = np.argmax(y)
-        mean_y_i = (np.abs(y - mean_y)).argmin()
-        max_x = (x[max_y_i]+x[(max_y_i+1)])/2
-        mean_x =(x[mean_y_i]+x[(mean_y_i+1)])/2
+    # axs[i].axvline(mean_x,0,(max_y+10),c='r',linewidth=1.7)
+    axs[0].axvline(0,0,1,c='k',linewidth=1,ls='-.')
+    
+    axs[0].set_xlim(-1,1)
+    axs[0].set_xlabel('RMI')
+    axs[0].set_ylabel('normalized counts')
 
-        # axs[i].axvline(mean_x,0,(max_y+10),c='r',linewidth=1.7)
-        axs[i].axvline(0,0,(max_y+10),c='b',linewidth=1.7)
-        axs[i].set_xlim(-0.5,0.5)
-        axs[i].set_xlabel('RMI')
+    axs[0].spines[['right','top','left','bottom']].set_visible(False)
+    plt.grid('dashed',linewidth = 1.5, alpha = 0.25)
+    plt.legend()
 
     plt.savefig(save_name, bbox_inches='tight')
+    plt.show()
     plt.close(fig)

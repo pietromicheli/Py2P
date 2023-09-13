@@ -15,10 +15,12 @@ def chirp_stim(
     BG = np.ones(int(2*fr))*0.5
     t_fm = np.linspace(0,20,int(8*fr))
     FM = (chirp(t_fm,0.2,40,1)+1)/2
-    t_am = np.linspace(0,21,int(21*fr)) # 0.55 hz
-    # a_am = np.linspace(0.01,0.5,int(21*fr)) # 0.55 hz
-    scale = t_am/21
-    AM = (np.sin(t_am*2*np.pi*0.57))/2*scale+0.5
+    freq = 0.9 #0.55
+    ttot = 12/freq
+    t_am = np.linspace(0,ttot,int(ttot*fr))
+    # a_am = np.linspace(0.01,0.5,int(21*fr))
+    scale = t_am/ttot
+    AM = (np.sin(t_am*2*np.pi*freq))/2*scale+0.5
     
     stim_conc = np.concatenate([pad_left,chunk_OFF1,chunk_ON,chunk_OFF2,chunk_ON*0.5,
                                 FM,BG,AM,BG,chunk_OFF1,chunk_ON,chunk_OFF1,chunk_ON,chunk_OFF1])
@@ -33,7 +35,7 @@ def chirp_stim(
     ax.axvline(blue_x, 0, 1, linewidth=13, color='b',alpha=0.3)
     
     ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
-    ax.set_ylabel("brightness", fontsize=13)
+    ax.set_ylabel("brightness", fontsize=18)
 
     return ax
 
@@ -57,7 +59,7 @@ def full_field_stim(
 
     ax.plot(stim_conc,c='k')
     ax.axvspan(stim_start, stim_end, color='y', alpha=0.1)
-    ax.set_ylabel("brightness", fontsize=13)
+    ax.set_ylabel("brightness", fontsize=18)
 
     return ax
 
@@ -65,13 +67,17 @@ def contrast_ramp_stim(
     ax,
     pad_l = 40,
     stim_len = None,
-    fr = 15.5):
+    fr = 15.5,
+    freq = 0.9 #0.57
+    ):
 
+   ncycles = 12
+   ttot = int(ncycles/freq)
 
    pad_left = np.ones(pad_l)*0.5
-   t_am = np.linspace(0,21,int(21*fr)) # 0.55 hz
+   t_am = np.linspace(0,ttot,int(ttot*fr)) 
    scale = t_am/21
-   AM = (np.sin(t_am*2*np.pi*0.57))/2*scale+0.5
+   AM = (np.sin(t_am*2*np.pi*freq))/2*scale+0.5
    
    stim_conc = np.concatenate([pad_left,AM])
    
@@ -80,6 +86,6 @@ def contrast_ramp_stim(
    ax.plot(stim_conc,c='k')
    
    ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
-   ax.set_ylabel("brightness", fontsize=13)
+   ax.set_ylabel("brightness", fontsize=18)
 
    return ax

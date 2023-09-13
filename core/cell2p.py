@@ -86,27 +86,27 @@ class Cell2p:
             pvalue_corr = 1-(1-pvalue)**n
             return pvalue_corr
 
-    def _compute_rmi_(self, a, b, mode="auc"):
+    def _compute_rmi_(self, a, b, mode_rmi="auc"):
 
-        if mode == "auc":
+        if mode_rmi == "auc":
 
             a_ = trapz(abs(a), dx=1)
             b_ = trapz(abs(b), dx=1)
 
-        elif mode == "peak":
+        elif mode_rmi == "peak":
 
-            a_ = np.max(abs(a))
-            b_ = np.max(abs(b))
+            a_ = np.max(a)
+            b_ = np.max(b)
 
         rmi = (a_ - b_) / (a_ + b_)
 
-        return rmi
+        return rmi, a_, b_
 
     def _compute_snr_imp_(self, a, b):
 
         """
         Extract noise and signal components from each signal,
-        compute SNR and return ration between SNRs
+        compute SNR and return ratio between SNRs
         """
 
         a_s = filter(a, 0.2, btype="low")
@@ -167,6 +167,7 @@ class Cell2p:
                 :-1
             ]:  # last item is stim_window
 
+                trials_raw = []
                 trials_dff = []
                 trials_spks = []
                 trials_zspks = []
@@ -198,9 +199,7 @@ class Cell2p:
 
                     resp_dff = (resp - mean_baseline) / mean_baseline
 
-                    # smooth with lp filter
-                    # resp_dff = filter(resp_dff, self.params["lowpass_wn"])
-
+                    trials_raw.append(resp)
                     trials_dff.append(resp_dff)
 
                     # spiking activity
@@ -223,6 +222,7 @@ class Cell2p:
                     trials_zspks.append(resp_zspks)
 
                 # convert to array
+                trials_raw = np.array(trials_raw)
                 trials_dff = np.array(trials_dff)
                 trials_spks = np.array(trials_spks)
                 trials_zspks = np.array(trials_zspks)
@@ -249,6 +249,8 @@ class Cell2p:
 
                 analyzed_trials[stim] |= {
                     trial_type: {
+                        "average_raw": np.mean(trials_raw, axis=0),
+                        "std_raw": np.mean(trials_raw, axis=0),
                         "trials_dff": trials_dff,
                         "average_dff": np.mean(trials_dff, axis=0),
                         "std_dff": np.std(trials_dff, axis=0),
@@ -317,7 +319,7 @@ class Cell2p:
 
         return responsive
 
-    def calculate_modulation(self, stim, trial_name_1, trial_name_2, mode="rmi"):
+    def calculate_modulation(self, stim, trial_name_1, trial_name_2, mode="rmi", slice=(0,-1), **kwargs):
 
         """
         Calculate Response Modulation Index on averaged responses to
@@ -330,22 +332,26 @@ class Cell2p:
         - trial_type_2: str
             second trial_type name (i.e "BOTH","CONTRA","IPSI"),
             it is supposed to be different from trial_type_1.
+        - slice: tuple
+            slice indexes to use for extracting the portion of the traces that will
+            be used for calculating the modulation.
         """
 
         if not self.analyzed_trials:
 
             self.analyze()
 
-        average_resp_1 = self.analyzed_trials[stim][trial_name_1]["average_dff"]
-        average_resp_2 = self.analyzed_trials[stim][trial_name_2]["average_dff"]
+        average_resp_1 = self.analyzed_trials[stim][trial_name_1]["average_dff"][slice[0]:slice[1]]
+        average_resp_2 = self.analyzed_trials[stim][trial_name_2]["average_dff"][slice[0]:slice[1]]
+
 
         if mode == "rmi":
 
-            mod = self._compute_rmi_(average_resp_1, average_resp_2)
+            mod = self._compute_rmi_(average_resp_1, average_resp_2, **kwargs)
 
         elif mode == "snr":
 
-            mod = self._compute_snr_imp_(average_resp_1, average_resp_2)
+            mod = self._compute_snr_imp_(average_resp_1, average_resp_2, **kwargs)
 
         return mod
 

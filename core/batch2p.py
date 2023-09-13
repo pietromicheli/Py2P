@@ -1,7 +1,7 @@
 import numpy as np
 
+from .rec2p import Rec2p 
 from Py2P.utils import *
-from Py2P.rec2p import Rec2p 
 from Py2P.plot import plot_clusters
 
 class Batch2p:
@@ -83,6 +83,7 @@ class Batch2p:
             self.recs |= {rec_id: (rec, group_id)}
 
         self.cells = None
+        self.populations = []
 
     def load_params(self):
 
@@ -93,7 +94,7 @@ class Batch2p:
 
         for rec in self.recs:
 
-            rec.load_params()
+            self.recs[rec][0].load_params()
 
     def get_cells(self):
 
@@ -251,6 +252,7 @@ class Batch2p:
         groups_name=None,
         n_components=2,
         tsne_params=None,
+        marker_mode=1,
         **kwargs
         ):
 
@@ -265,6 +267,9 @@ class Batch2p:
             algorithm for demensionality reduction. Can be pca or tsne.
         - n_components: int
             number of component used by GMM for clustering.
+        - marker_mode: int
+            0: markers represent the groups
+            1: markers represent the recordings
         - **kwargs:
             any valid argument to parametrize compute_fingerprints() method
 
@@ -291,7 +296,7 @@ class Batch2p:
                         'perplexity':10, 
                         'n_iter':3000, 
                         'init':'pca', 
-                        'angle':0.1}
+                        'angle':0.9}
 
             transformed = TSNE_embedding(fp,**tsne_params)
 
@@ -299,7 +304,7 @@ class Batch2p:
         labels = GMM(transformed,n_components=n_components,covariance_type='diag')
 
         if markers:
-            markers = [int(id.split(sep='_')[0]) for id in cells_ids]
+            markers = [int(id.split(sep='_')[marker_mode]) for id in cells_ids]
 
         else:
             markers=None
@@ -322,6 +327,14 @@ class Batch2p:
                 c.append(cells_ids[i])
 
             pops.append(c)
+
+        self.populations.append(pops)
+
+        # assign pop label at each cell
+        for i,pop in enumerate(pops):
+            for id in pop:
+
+                self.cells[id].label = i
 
         return pops
     

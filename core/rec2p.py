@@ -4,10 +4,10 @@ import warnings
 from tqdm import tqdm
 from sklearn.decomposition import PCA
 
-from Py2P.sync import Sync
+from .sync import Sync
+from .cell2p import Cell2p
 from Py2P.utils import *
 from Py2P.plot import plot_clusters
-from Py2P.cell2p import Cell2p
 
 class Rec2p:
 
@@ -68,9 +68,9 @@ class Rec2p:
 # 
             pad_len = sync.sync_ds[sync.stims_names[-1]]['stim_window'][1]-self.nframes
 
-            self.Fraw = np.pad(self.Fraw,((0,0),(0,pad_len)),mode='mean',stat_length=((0,0),(0,10)))
-            self.Fneu = np.pad(self.Fneu,((0,0),(0,pad_len)),mode='mean',stat_length=((0,0),(0,10)))
-            self.spks = np.pad(self.spks,((0,0),(0,pad_len)),mode='mean',stat_length=((0,0),(0,10)))
+            self.Fraw = np.pad(self.Fraw,((0,0),(0,pad_len)),mode='constant',constant_values=((0,0),(0,np.mean(self.Fraw[-10:]))))
+            self.Fneu = np.pad(self.Fneu,((0,0),(0,pad_len)),mode='constant',constant_values=((0,0),(0,np.mean(self.Fneu[-10:]))))
+            self.spks = np.pad(self.spks,((0,0),(0,pad_len)),mode='constant',constant_values=((0,0),(0,np.mean(self.spks[-10:]))))
 
             print('> WARNING: last trial has been padded (pad length:%d, Fraw value:%d)'%(pad_len,np.mean(self.Fraw[-1])))
 # 
@@ -125,7 +125,7 @@ class Rec2p:
         self, 
         keep_unresponsive: bool=False, 
         n: int = None, 
-        clean_memory=True
+        clean_memory=False
     ):
 
         """
@@ -208,6 +208,7 @@ class Rec2p:
 
     def compute_fingerprints(
         self, 
+        cells_ids,
         stim_trials_dict=None, 
         type="dff", 
         normalize="z", 
@@ -233,13 +234,13 @@ class Rec2p:
 
         if stim_trials_dict == None:
 
-            stim_trials_dict = {stim: [] for stim in self.stims_trials_intersection}
+            stim_trials_dict = {stim: [] for stim in self.sync.stims_names}
 
         responsive = self.get_responsive()
 
         fingerprints = []
 
-        for cell in responsive:
+        for cell in cells_ids:
 
             average_resp = self.cells[cell].analyzed_trials
 
@@ -252,7 +253,7 @@ class Rec2p:
 
                 if not trials_names:
 
-                    trials_names = list(self.stims_trials_intersection[stim])
+                    trials_names = list(self.sync.stims_dict[stim])
 
                 for trial_name in trials_names:
 
