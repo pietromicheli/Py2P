@@ -16,7 +16,7 @@ import numpy as np
 ###---UTILITY FUNCTIONS---###
 #############################
 
-CONFIG_FILE_TEMPLATE = r"%s/params.yaml" % pathlib.Path(__file__).parent.resolve()
+CONFIG_FILE_TEMPLATE = r"%s/core/params.yaml" % pathlib.Path(__file__).parent.resolve()
 DEFAULT_PARAMS = {}
 
 

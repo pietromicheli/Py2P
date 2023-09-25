@@ -193,7 +193,9 @@ def draw_full(
     cells,
     sync: Sync,
     type="dff",
+    func_=None,
     stim=None,
+    ylabel=None,
     x_scale='sec'):
 
     """
@@ -226,6 +228,10 @@ def draw_full(
         r = r[sync.sync_ds[stim]["stim_window"][0]:
               (sync.sync_ds[stim]["stim_window"][1]+
               cell.params["baseline_frames"])]
+        
+        if func_ != None:
+            r = func_[0](r,**func_[1])
+
 
         stims = [stim]
         offset = sync.sync_ds[stim]["stim_window"][0]
@@ -237,12 +243,12 @@ def draw_full(
 
     if x_scale=='sec':
 
-        ax.set_xlabel("time (s)")
+        ax.set_xlabel("time (s)", fontsize=18)
         xscale = cell.params["fr"]
 
     elif x_scale=='frames':
 
-        ax.set_xlabel("frames")
+        ax.set_xlabel("frames", fontsize=18)
         xscale = 1
 
     x = np.arange(len(r))/xscale
@@ -255,11 +261,15 @@ def draw_full(
 
     if type == "Fraw" or type == "Fneu":
 
-        ax.set_ylabel("raw fluoresence")
+        ax.set_ylabel("raw fluoresence", fontsize=18)
 
     else:
 
-        ax.set_ylabel("\u0394F/F")
+        ax.set_ylabel("\u0394F/F", fontsize=18)
+
+    if ylabel != None:
+
+        ax.set_ylabel(ylabel, fontsize=18)
 
     for stim in stims:
 
@@ -396,18 +406,26 @@ def plot_multipleStim(
 
     ## if full is specidied, and average==False, add a row to the figure
     add_row = 0
+    add_full = 0
+    add_stim = 0
 
     if full != None:
 
-        add_row +=1
+        add_full = 1
 
-    if plot_stim:
+    for stim in stims:
+        if plot_stim and "%s_stim"%stim in globals():
 
-        add_row +=1
+            add_stim = 1
+
+    if add_stim == 0:
+        plot_stim = False
+
+    add_row = add_full+add_stim
 
     # main loop
     for c in cells:
-                
+
         if group_trials:
 
             fig, axs = plt.subplots(
@@ -446,8 +464,8 @@ def plot_multipleStim(
 
         for j,stim in enumerate(stims):
 
-            y_max = 0
-            y_min = 0
+            # y_max = 0
+            # y_min = 0
 
             trials_ = sorted(stim_dict[stim])
 
@@ -455,20 +473,21 @@ def plot_multipleStim(
 
                 ## make sure to use only trials which exist for a specific stim
                 # trials_ = set(trials).intersection(set(sync.sync_ds[stim]))
-
                 # trials_ = sorted(stim_dict[stim])
 
-                if full:
+                axs_ = axs
+
+                if full != None:
 
                     axs_ = axs[0]
 
                 if plot_stim:
 
-                    axs_= axs[1]
+                    axs_ = axs[1]
 
                 else:
 
-                    axs_ = axs
+                    axs_ = axs_
 
                 if len(stims)>1:
 
@@ -477,7 +496,7 @@ def plot_multipleStim(
                 elif not plot_stim:
 
                     axs_ = axs_[0]
-                                 
+
                 _, ymax, ymin = draw_singleStim(axs_, c, stim, trials_, type, ylabel=ylabel, 
                                                 stim_window=stim_window,func_=func_, legend=legend)
 
@@ -536,8 +555,11 @@ def plot_multipleStim(
 
                     ax_full = axs[-1,j]
 
-                _, ymax, ymin = draw_full(ax_full, c, sync, type=full, stim=stim)
+                _, ymax, ymin = draw_full(ax_full, c, sync, type=full, func_=None, stim=stim, ylabel=None)
 
+                # if ymax > y_max: y_max = ymax
+
+                # if ymin < y_min: y_min = ymin
 
                 ax_full.set_title("")
 
@@ -549,7 +571,8 @@ def plot_multipleStim(
 
                     axs_T = axs_T[j]
 
-                try:
+                if "%s_stim"%stim in globals():
+
                     func = globals()["%s_stim"%stim]
                     ## retrive parameters 
                     cell = c
@@ -574,24 +597,21 @@ def plot_multipleStim(
                     axs_T[0].set_xticklabels([])
                     axs_T[0].set_yticklabels([])
                     axs_T[1].set_title("")   
-
-                except:
-                    axs_T[0].axis('off')
-                    warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)  
-                            
-            if plot_stim: s = 1
-            else: s = 0
             
-            if isinstance(axs.T[j], np.ndarray):
+        
+        # if isinstance(axs.T[j], np.ndarray):
 
-                axs_ = axs.T[j]
-                
-            else:
-                axs_ = axs.T
+        #     axs_ = axs.T[j]
+            
+        # else:
+        #     axs_ = axs.T
+        
+        if plot_stim: axs= axs [1:]
+        if full != None: axs = axs[:-1]
 
-            for ax in axs_.flatten()[s:]:
+        for ax in axs.flatten():
 
-                ax.set_ylim(y_min+(y_min/5), y_max+(y_max/5))
+            ax.set_ylim(y_min-(abs(y_min/5)), y_max+(abs(y_max/5)))
 
         if share_y:
 
@@ -727,14 +747,19 @@ def plot_heatmaps(
 
         all_trials = set(sorted(all_trials))
 
-        fig, axs = plt.subplots(len(all_trials)+1,len(stims),figsize=(20,20))
+        add_row = 0
+        for stim in stims:
+            if "%s_stim"%stim in globals():
+                add_row=1
+
+        fig, axs = plt.subplots(len(all_trials)+add_row,len(stims),figsize=(20,20))
 
         cbar = False
 
         for i,trial in enumerate(all_trials):
 
-            i = i+1  
-
+            i = i+add_row
+            
             for j,stim in enumerate(stims):
 
                 if not isinstance(axs, np.ndarray):
@@ -782,7 +807,8 @@ def plot_heatmaps(
                     draw_heatmap(resp_all,vmin=vmin,vmax=vmax,cb_label=cb_label,cbar=cbar,ax=ax)
 
                     # try to plot stimuli
-                    try:
+                    if "%s_stim"%stim in globals():
+
                         func = globals()["%s_stim"%stim]
                         
                         ## retrive parameters 
@@ -798,18 +824,14 @@ def plot_heatmaps(
                         axs[0,j].grid('dashed',linewidth = 1.5, alpha = 0.25)
                         axs[0,j].set_xticklabels([])
                         axs[0,j].set_yticklabels([])
-                        axs[0,j].set_title("")   
-
-                    except:
-                        axs[0,j].axis('off')
-                        warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)
+                        axs[0,j].set_title("")
 
                 else:
                     ax.axis("off")
 
         if len(all_trials)>1:
 
-            for ax, trial in zip(axs[1:], all_trials):
+            for ax, trial in zip(axs[add_row:], all_trials):
                 ax[0].set_ylabel(trial,fontsize=18)
 
         else:

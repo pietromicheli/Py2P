@@ -285,8 +285,8 @@ class Batch2p:
             pca = PCA(n_components=2)
             transformed = pca.fit_transform(fp)
             exp_var = pca.explained_variance_ratio_
-            xlabel = "PC1 (% {})".format(exp_var[0])
-            ylabel = "PC2 (% {})".format(exp_var[1])
+            xlabel = "PC1 (% {})".format(round(exp_var[0],2))
+            ylabel = "PC2 (% {})".format(round(exp_var[1],2))
 
         elif algo=='tsne':
 
