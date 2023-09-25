@@ -853,7 +853,8 @@ def plot_clusters(
     data,
     labels,
     markers=None,
-    algo='',
+    xlabel='',
+    ylabel='',
     l1loc='upper right',
     l2loc='upper left',
     groups_name='Group',
@@ -945,8 +946,8 @@ def plot_clusters(
                             )
         ax.add_artist(legend2)
 
-    ax.set_xlabel("%s 1"%algo, fontsize=18)
-    ax.set_ylabel("%s 2"%algo, fontsize=18)
+    ax.set_xlabel(xlabel, fontsize=18)
+    ax.set_ylabel(ylabel, fontsize=18)
     ax.set_title("%d ROIs"%(len(Xax)))
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)

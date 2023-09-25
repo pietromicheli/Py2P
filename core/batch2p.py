@@ -282,7 +282,11 @@ class Batch2p:
         if algo=='pca':
             
             # run PCA
-            transformed = PCA(n_components=2).fit_transform(fp)
+            pca = PCA(n_components=2)
+            transformed = pca.fit_transform(fp)
+            exp_var = pca.explained_variance_ratio_
+            xlabel = "PC1 (% {})".format(exp_var[0])
+            ylabel = "PC2 (% {})".format(exp_var[1])
 
         elif algo=='tsne':
 
@@ -299,6 +303,8 @@ class Batch2p:
                         'angle':0.9}
 
             transformed = TSNE_embedding(fp,**tsne_params)
+            xlabel = "Dimension 1"
+            ylabel = "Dimension 2"
 
         # clusterize
         labels = GMM(transformed,n_components=n_components,covariance_type='diag')
@@ -310,10 +316,10 @@ class Batch2p:
             markers=None
 
         if save_name:
-            plot_clusters(transformed,labels,markers,groups_name=groups_name,algo=algo,save='%s_%s'%(save_name,algo))
+            plot_clusters(transformed,labels,markers,xlabel,ylabel,groups_name=groups_name,save='%s_%s'%(save_name,algo))
 
         else:
-            plot_clusters(transformed,labels,markers,algo=algo,save='')
+            plot_clusters(transformed,labels,markers,xlabel,ylabel,save='')
 
         # get popos
         pops = []
