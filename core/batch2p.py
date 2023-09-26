@@ -1,10 +1,10 @@
 import numpy as np
 
-from .rec2p import Rec2p 
+from .rec2p import R2p 
 from Py2P.utils import *
 from Py2P.plot import plot_clusters
 
-class Batch2p:
+class B2p:
 
     """
     Class for performing batch analysis of multiple recordings.
@@ -79,7 +79,7 @@ class Batch2p:
             else:
                 group_id = groups[data_path]
 
-            rec = Rec2p(data_path, sync)
+            rec = R2p(data_path, sync)
             self.recs |= {rec_id: (rec, group_id)}
 
         self.cells = None
@@ -248,7 +248,7 @@ class Batch2p:
         cells_ids=None,
         algo='pca',
         markers=True,
-        save_name='',
+        save_name=None,
         groups_name=None,
         n_components=2,
         tsne_params=None,
@@ -285,8 +285,8 @@ class Batch2p:
             pca = PCA(n_components=2)
             transformed = pca.fit_transform(fp)
             exp_var = pca.explained_variance_ratio_
-            xlabel = "PC1 (% {})".format(round(exp_var[0],2))
-            ylabel = "PC2 (% {})".format(round(exp_var[1],2))
+            xlabel = "PC1 (% {})".format(round(exp_var[0]*100,2))
+            ylabel = "PC2 (% {})".format(round(exp_var[1]*100,2))
 
         elif algo=='tsne':
 
@@ -307,7 +307,9 @@ class Batch2p:
             ylabel = "Dimension 2"
 
         # clusterize
-        labels = GMM(transformed,n_components=n_components,covariance_type='diag')
+        # labels = GMM(transformed,n_components=n_components,covariance_type='diag')
+        k = find_optimal_kmeans_k(transformed)
+        labels = k_means(transformed, k)
 
         if markers:
             markers = [int(id.split(sep='_')[marker_mode]) for id in cells_ids]
@@ -315,11 +317,7 @@ class Batch2p:
         else:
             markers=None
 
-        if save_name:
-            plot_clusters(transformed,labels,markers,xlabel,ylabel,groups_name=groups_name,save='%s_%s'%(save_name,algo))
-
-        else:
-            plot_clusters(transformed,labels,markers,xlabel,ylabel,save='')
+        plot_clusters(transformed,labels,markers,xlabel,ylabel,groups_name=groups_name,save=save_name)
 
         # get popos
         pops = []

@@ -31,7 +31,7 @@
   # Type of metrics used for quantifying responsiveness. 
   # 0: var(mean)/mean(var) 
   # 1: ttest on pre vs post stimulus activity
-  qi_metrics : 1
+  qi_metrics : 0
 
   # quality index threshold above which an roi is considered responsive (only used if q_metrics is set to 1)
   qi_threshold : 0.45

@@ -43,7 +43,7 @@ def draw_singleStim(
     Plot average response calculated across all the specified cells .
 
     - cells: 
-        cell to plot. if a list of Cell2P object is passed, plot the mean. 
+        cell to plot. if a list of C2p object is passed, plot the mean. 
     - sync: Sync
         Sync object associated to the cells
     - stim:
@@ -200,7 +200,7 @@ def draw_full(
 
     """
     Plot full length traces for all cells. If stim is specified, plot full trace
-    for that stim. If cells is a list of Cell2P object, plot the average.
+    for that stim. If cells is a list of C2p object, plot the average.
 
     """
 
@@ -349,7 +349,7 @@ def plot_multipleStim(
     want to plot.
 
     - cells: list
-        list of Cell2P objects
+        list of C2p objects
     - stim_dict: dict
         dict containing stim:[trials] items specyfying what to plot
     - average: bool
@@ -627,16 +627,16 @@ def plot_multipleStim(
 
                 for path in save_path:
 
-                    plt.savefig(r"%s/pop_average_%s%s.png" %(path,type,save_suffix), 
+                    plt.savefig(r"%s/pop_average_%s%s.png" %(path,type,save_suffix),
                                 bbox_inches="tight")
-                    plt.close(fig)
+
             else:
 
                 for path in save_path:
                 
                     plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.id,type,save_suffix),
                                 bbox_inches="tight")
-                    plt.close(fig)
+        plt.close(fig)
     
 def plot_FOV(
         rec,
@@ -649,8 +649,8 @@ def plot_FOV(
     Plot mean image of the FOV with masks of the passed cells.
     If cells_ids is list of lists, each sublist will be considered as a population.
 
-    - rec: Rec2P
-        Rec2P object from which the cells have been extracted.
+    - rec: R2p
+        R2p object from which the cells have been extracted.
     - cells: list 
         list of valid cells ids
     - k: int
@@ -720,7 +720,7 @@ def plot_heatmaps(
     Plot heatmap for all the cells.
 
     - cells: list
-        list of Cell2P objects
+        list of C2p objects
     - stim_dict: dict
         dict containing stim:[trials] items specyfying what to plot
     - stims: list
@@ -980,7 +980,7 @@ def plot_clusters(
 
     if save!=None:
 
-        plt.savefig(save, bbox_inches='tight', bbox_extra_artists=(legend1,))
+        plt.savefig(save, bbox_extra_artists=(legend1,))
 
 def plot_sparse_noise(
         cells,
@@ -994,7 +994,7 @@ def plot_sparse_noise(
     """
     Plot sparse noise responses for each cell, overlying ON and OFF responses
     for each grid location.
-    - cells: list of Cell2P
+    - cells: list of C2p
         cells to be plotted
     - texture_dim: tuple
         tuple specifying the dimension of the texture matrix used for sparse noise stim
