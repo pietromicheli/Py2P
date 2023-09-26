@@ -38,7 +38,7 @@ def merge_mat_files(mat_files, offsets):
         mat_dict,
     )
 
-    print("\n> sync file merged and saved in %s"%path)
+    print("> sync file merged and saved in %s"%path)
 
     return path + "sync_merged.mat"
 
