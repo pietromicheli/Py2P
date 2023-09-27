@@ -210,6 +210,15 @@ def find_optimal_kmeans_k(x):
 
     elbow = np.argmax(dcurv)
 
+    plt.figure()
+    plt.plot(x_plot, fitted_curve)
+    plt.axvline(x_plot[elbow],0,fitted_curve.max(),color='r',linestyle='--',label='elbow')
+    plt.xlabel('K')
+    plt.ylabel('Sum_of_squared_distances')
+    plt.grid(alpha=0.5)
+    plt.legend()
+    plt.show()
+
     return round(x_plot[elbow])
 
 def check_len_consistency(sequences, mode='trim', mean_len=10):

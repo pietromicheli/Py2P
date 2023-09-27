@@ -247,6 +247,7 @@ class B2p:
         self,
         cells_ids=None,
         algo='pca',
+        clusters='kmeans',
         markers=True,
         save_name=None,
         groups_name=None,
@@ -265,6 +266,8 @@ class B2p:
             By thefault, all the cells present in the batch will be analyzed.
         - algo: str
             algorithm for demensionality reduction. Can be pca or tsne.
+        - clusters: str
+            clustering algorithm. can be "kmeans" or "gmm" (gaussian mixture model)
         - n_components: int
             number of component used by GMM for clustering.
         - marker_mode: int
@@ -285,8 +288,8 @@ class B2p:
             pca = PCA(n_components=2)
             transformed = pca.fit_transform(fp)
             exp_var = pca.explained_variance_ratio_
-            xlabel = "PC1 (% {})".format(round(exp_var[0]*100,2))
-            ylabel = "PC2 (% {})".format(round(exp_var[1]*100,2))
+            xlabel = "PC1 ({} %)".format(round(exp_var[0]*100,2))
+            ylabel = "PC2 ({} %)".format(round(exp_var[1]*100,2))
 
         elif algo=='tsne':
 
@@ -309,7 +312,11 @@ class B2p:
         # clusterize
         # labels = GMM(transformed,n_components=n_components,covariance_type='diag')
         k = find_optimal_kmeans_k(transformed)
-        labels = k_means(transformed, k)
+
+        if clusters == 'kmeans':
+            labels = k_means(transformed, k)
+        elif clusters == 'gmm':
+            labels = GMM(transformed,n_components=(k+1),covariance_type='diag')
 
         if markers:
             markers = [int(id.split(sep='_')[marker_mode]) for id in cells_ids]
