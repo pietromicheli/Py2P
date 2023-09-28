@@ -248,10 +248,10 @@ class B2p:
         cells_ids=None,
         algo='pca',
         clusters='kmeans',
+        k=None,
         markers=True,
         save_name=None,
         groups_name=None,
-        n_components=2,
         tsne_params=None,
         marker_mode=1,
         **kwargs
@@ -268,8 +268,8 @@ class B2p:
             algorithm for demensionality reduction. Can be pca or tsne.
         - clusters: str
             clustering algorithm. can be "kmeans" or "gmm" (gaussian mixture model)
-        - n_components: int
-            number of component used by GMM for clustering.
+        - k: int
+            number of expected clusters.
         - marker_mode: int
             0: markers represent the groups
             1: markers represent the recordings
@@ -311,12 +311,13 @@ class B2p:
 
         # clusterize
         # labels = GMM(transformed,n_components=n_components,covariance_type='diag')
-        k = find_optimal_kmeans_k(transformed)
+        if k == None:
+            k = find_optimal_kmeans_k(transformed)
 
         if clusters == 'kmeans':
             labels = k_means(transformed, k)
         elif clusters == 'gmm':
-            labels = GMM(transformed,n_components=(k+1),covariance_type='diag')
+            labels = GMM(transformed,n_components=(k),covariance_type='diag')
 
         if markers:
             markers = [int(id.split(sep='_')[marker_mode]) for id in cells_ids]
@@ -348,172 +349,4 @@ class B2p:
                 self.cells[id].label = i
 
         return pops
-    
-
-    # OLD CODE #
-    # def get_populations(
-    #     self,
-    #     stim_trials_dict=None,
-    #     n_clusters=None,
-    #     use_tsne=False,
-    #     type="dff",
-    #     normalize="lin",
-    #     plot=True,
-    # ):
-
-    #     """
-    #      Clusterize the activity traces of all the cells into population using PCA/TSNE and K-means.
-
-    #      - stim_trials_dict: dict
-    #          A dict which specifies which stim and which trials to concatenate for computing
-    #          the fingerptint.
-    #          Should contain key-values pairs such as {stim:[t1,...,tn]}, where stim is a valid
-    #          stim name and [t1,...,tn] is a list of valid trials for that stim.
-    #     - n_clusters: int
-    #          Number of cluster to use for k means clustering
-    #      - use_tsne: bool
-    #          wether to compute tsne embedding after PCA decomposition
-    #      - type: str
-    #          can be either "dff" or "zspks"
-    #      - normalize: str
-    #          'lin': signals will be normalized between 0 and 1 before running PCA
-    #          'z': signals will be normalized using z score normalization before running PCA
-    #          otherwise, no normalization will be applied
-
-    #     """
-    #     responsive = self.get_responsive()
-
-    #     # compute fingerprints
-    #     x = self.compute_fingerprints(stim_trials_dict, type, normalize)
-
-    #     # embed data
-    #     if use_tsne:
-
-    #         if len(x) < 50:
-    #             n_comp = len(x)
-    #         else:
-    #             n_comp = 50
-
-    #         # run PCA
-    #         pca = PCA(n_components=n_comp)
-    #         transformed = pca.fit_transform(x)
-    #         # run t-SNE
-    #         transformed = self.TSNE_embedding(x)
-
-    #     else:
-
-    #         # PCA embedding
-    #         pca = PCA(n_components=50)
-    #         transformed = pca.fit_transform(x)
-
-    #     # if the nuber of cluster is not specified, find optimal n
-    #     if n_clusters == None:
-
-    #         n_clusters = find_optimal_kmeans_k(transformed)
-
-    #     # run Kmeans
-    #     kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(
-    #         transformed
-    #     )
-
-    #     labels = kmeans.labels_
-
-    #     # retrive clusters
-    #     clusters = []
-
-    #     for n in np.unique(labels):
-
-    #         indices = np.squeeze(np.argwhere(labels == n))
-    #         c = []
-
-    #         for i in indices:
-
-    #             c.append(responsive[i])
-
-    #         clusters.append(c)
-
-    #     if plot:
-
-    #         clist = list(colors.TABLEAU_COLORS.keys())
-    #         markers = list(Line2D.markers.items())[2:]
-    #         # random.shuffle(markers)
-
-    #         if use_tsne:
-
-    #             algo = "t-SNE"
-
-    #             Xax = transformed[:, 0]
-    #             Yax = transformed[:, 1]
-
-    #             fig = plt.figure(figsize=(7, 5))
-    #             ax = fig.add_subplot(111)
-
-    #             fig.patch.set_facecolor("white")
-
-    #             for l in np.unique(labels):
-
-    #                 color = clist[l]
-    #                 ix = np.where(labels == l)[0]
-
-    #                 for i in ix:
-
-    #                     marker = markers[int(responsive[i].split("_")[0])][0]
-    #                     ax.scatter(
-    #                         Xax[i],
-    #                         Yax[i],
-    #                         edgecolor=color,
-    #                         s=50,
-    #                         marker=marker,
-    #                         facecolors="none",
-    #                         alpha=0.8,
-    #                     )
-
-    #             ax.set_xlabel("%s 1" % algo, fontsize=9)
-    #             ax.set_ylabel("%s 2" % algo, fontsize=9)
-
-    #             ax.set_title("%d ROIs (n=%d)" % (len(Xax), len(self.recs)))
-
-    #         else:
-
-    #             algo = "PCA"
-
-    #             Xax = transformed[:, 0]
-    #             Yax = transformed[:, 1]
-    #             Zax = transformed[:, 2]
-
-    #             fig = plt.figure(figsize=(7, 5))
-    #             # ax = fig.add_subplot(111, projection="3d")
-    #             ax = fig.add_subplot(111)
-
-    #             fig.patch.set_facecolor("white")
-
-    #             for l in np.unique(labels):
-
-    #                 color = clist[l]
-    #                 ix = np.where(labels == l)[0]
-    #                 # ax.scatter(
-    #                 #     Xax[ix], Yax[ix], Zax[ix], c=clist[l], s=40)
-
-    #                 for i in ix:
-
-    #                     marker = markers[int(responsive[i].split("_")[0])][0]
-    #                     ax.scatter(
-    #                         Xax[i],
-    #                         Yax[i],
-    #                         edgecolor=color,
-    #                         s=50,
-    #                         marker=marker,
-    #                         facecolors="none",
-    #                         alpha=0.8,
-    #                     )
-
-    #             ax.set_xlabel("%s 1" % algo, fontsize=9)
-    #             ax.set_ylabel("%s 2" % algo, fontsize=9)
-    #             # ax.set_zlabel("%s 3"%algo, fontsize=9)
-
-    #             ax.set_title("%d ROIs (n=%d)" % (len(Xax), len(self.recs)))
-
-    #             # ax.view_init(30, 60)
-
-    #     return clusters
 

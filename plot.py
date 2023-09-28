@@ -941,15 +941,17 @@ def plot_clusters(
 
     p = []
     l = []
-    for i,c in enumerate(clist[np.unique(labels)]*0.7):
+    for i,ix in enumerate(np.unique(labels)):
 
+        c = clist[ix]*0.7
         p.append(patches.Rectangle((0,0),1,1,fc=c))
-        l.append("POP %d"%i)
+        l.append("POP %d: %d ROIs"%(i,len(labels[labels==ix])))
 
     legend1 = ax.legend(p,
                         l,
                         # loc=l1loc,
-                        bbox_to_anchor=(1.2, 1.0)
+                        bbox_to_anchor=(1.35, 1.0),
+                        bbox_transform=plt.gca().transAxes
                         )
     ax.add_artist(legend1)
     
@@ -964,7 +966,8 @@ def plot_clusters(
         
         legend2 = ax.legend([plt.plot([],[],marker=allmarkers[m][0],color='k', ls="none")[0] for m in np.unique(markers)],
                             ['%s %d'%(groups_name,i) for i in np.unique(markers)],
-                            bbox_to_anchor=(1.22, 0.2),
+                            bbox_to_anchor=(1.35, 0),
+                            bbox_transform=plt.gca().transAxes
                             )
         ax.add_artist(legend2)
 

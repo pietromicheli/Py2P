@@ -31,8 +31,8 @@ def chirp_stim(
     ax.plot(stim_conc,c='k')
     green_x = len(stim_conc)-len(pad_right)-int(8.5*fr)
     blue_x = len(stim_conc)-len(pad_right)-int(3.5*fr)
-    ax.axvline(green_x, 0, 1, linewidth=13, color='g',alpha=0.3)
-    ax.axvline(blue_x, 0, 1, linewidth=13, color='b',alpha=0.3)
+    ax.axvline(green_x, 0, 1, linewidth=20, color='g',alpha=0.3)
+    ax.axvline(blue_x, 0, 1, linewidth=20, color='b',alpha=0.3)
     
     ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
     ax.set_ylabel("brightness", fontsize=18)
@@ -68,7 +68,7 @@ def contrast_ramp_stim(
     pad_l = 40,
     stim_len = None,
     fr = 15.5,
-    freq = 0.9 #0.57
+    freq = 0.55 #0.57
     ):
 
    ncycles = 12

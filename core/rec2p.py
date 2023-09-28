@@ -295,7 +295,8 @@ class R2p:
         self,
         cells_ids=None,
         algo='pca',
-        n_components=2,
+        clusters='kmeans',
+        k=None,
         save_name='',
         **kwargs
         ):
@@ -309,8 +310,10 @@ class R2p:
             By thefault, all the cells present in the recording will be analyzed.
         - algo: str
             algorithm for demensionality reduction. Can be pca or tsne.
-        - n_components: int
-            number of component used by GMM for clustering.
+        - clusters: str
+            clustering algorithm. can be "kmeans" or "gmm" (gaussian mixture model)
+        - k: int
+            number of expected clusters 
         - **kwargs:
             any valid argument to parametrize compute_fingerprints() method
 
@@ -349,8 +352,13 @@ class R2p:
 
         # clusterize
         # labels = GMM(transformed,n_components=n_components,covariance_type='diag')
-        k = find_optimal_kmeans_k(transformed)
-        labels = k_means(transformed, k)
+        if k == None:
+            k = find_optimal_kmeans_k(transformed)
+
+        if clusters == 'kmeans':
+            labels = k_means(transformed, k)
+        elif clusters == 'gmm':
+            labels = GMM(transformed,n_components=(k),covariance_type='diag')
 
         plot_clusters(transformed,labels,None,xlabel,ylabel,save=save_name)
 
