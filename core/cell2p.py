@@ -23,7 +23,7 @@ class C2p:
 
         # reference data from rec object
         self.Fraw = rec.Fraw[id]
-        self.Fneu = rec.Fraw[id]
+        self.Fneu = rec.Fneu[id]
         self.spks = rec.spks[id]
         self.params = rec.params
 
