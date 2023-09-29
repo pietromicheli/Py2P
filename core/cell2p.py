@@ -5,7 +5,7 @@ from scipy.stats import ttest_ind
 
 from Py2P.utils import *
 
-class Cell2p:
+class C2p:
 
     """
     A Cell object to process, analyze and compute statistics
@@ -23,7 +23,7 @@ class Cell2p:
 
         # reference data from rec object
         self.Fraw = rec.Fraw[id]
-        self.Fneu = rec.Fraw[id]
+        self.Fneu = rec.Fneu[id]
         self.spks = rec.spks[id]
         self.params = rec.params
 
@@ -292,10 +292,10 @@ class Cell2p:
                 qis_stims.append(max(qis_trials))
 
             if self.params["qi_metrics"]==0:
-                responsive = any(qi >= self.params["qi_threshold"] for qi in qis_stims)
+                responsive = all([qi >= self.params["qi_threshold"] for qi in qis_stims])
 
             else:
-                responsive = any(qi <= 0.05 for qi in qis_stims)
+                responsive = all([qi <= 0.05 for qi in qis_stims])
 
         else:
 

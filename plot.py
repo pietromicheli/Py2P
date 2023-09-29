@@ -43,7 +43,7 @@ def draw_singleStim(
     Plot average response calculated across all the specified cells .
 
     - cells: 
-        cell to plot. if a list of Cell2P object is passed, plot the mean. 
+        cell to plot. if a list of C2p object is passed, plot the mean. 
     - sync: Sync
         Sync object associated to the cells
     - stim:
@@ -193,12 +193,14 @@ def draw_full(
     cells,
     sync: Sync,
     type="dff",
+    func_=None,
     stim=None,
+    ylabel=None,
     x_scale='sec'):
 
     """
     Plot full length traces for all cells. If stim is specified, plot full trace
-    for that stim. If cells is a list of Cell2P object, plot the average.
+    for that stim. If cells is a list of C2p object, plot the average.
 
     """
 
@@ -226,6 +228,10 @@ def draw_full(
         r = r[sync.sync_ds[stim]["stim_window"][0]:
               (sync.sync_ds[stim]["stim_window"][1]+
               cell.params["baseline_frames"])]
+        
+        if func_ != None:
+            r = func_[0](r,**func_[1])
+
 
         stims = [stim]
         offset = sync.sync_ds[stim]["stim_window"][0]
@@ -237,12 +243,12 @@ def draw_full(
 
     if x_scale=='sec':
 
-        ax.set_xlabel("time (s)")
+        ax.set_xlabel("time (s)", fontsize=18)
         xscale = cell.params["fr"]
 
     elif x_scale=='frames':
 
-        ax.set_xlabel("frames")
+        ax.set_xlabel("frames", fontsize=18)
         xscale = 1
 
     x = np.arange(len(r))/xscale
@@ -255,11 +261,15 @@ def draw_full(
 
     if type == "Fraw" or type == "Fneu":
 
-        ax.set_ylabel("raw fluoresence")
+        ax.set_ylabel("raw fluoresence", fontsize=18)
 
     else:
 
-        ax.set_ylabel("\u0394F/F")
+        ax.set_ylabel("\u0394F/F", fontsize=18)
+
+    if ylabel != None:
+
+        ax.set_ylabel(ylabel, fontsize=18)
 
     for stim in stims:
 
@@ -339,7 +349,7 @@ def plot_multipleStim(
     want to plot.
 
     - cells: list
-        list of Cell2P objects
+        list of C2p objects
     - stim_dict: dict
         dict containing stim:[trials] items specyfying what to plot
     - average: bool
@@ -396,18 +406,26 @@ def plot_multipleStim(
 
     ## if full is specidied, and average==False, add a row to the figure
     add_row = 0
+    add_full = 0
+    add_stim = 0
 
     if full != None:
 
-        add_row +=1
+        add_full = 1
 
-    if plot_stim:
+    for stim in stims:
+        if plot_stim and "%s_stim"%stim in globals():
 
-        add_row +=1
+            add_stim = 1
+
+    if add_stim == 0:
+        plot_stim = False
+
+    add_row = add_full+add_stim
 
     # main loop
     for c in cells:
-                
+
         if group_trials:
 
             fig, axs = plt.subplots(
@@ -446,8 +464,8 @@ def plot_multipleStim(
 
         for j,stim in enumerate(stims):
 
-            y_max = 0
-            y_min = 0
+            # y_max = 0
+            # y_min = 0
 
             trials_ = sorted(stim_dict[stim])
 
@@ -455,20 +473,21 @@ def plot_multipleStim(
 
                 ## make sure to use only trials which exist for a specific stim
                 # trials_ = set(trials).intersection(set(sync.sync_ds[stim]))
-
                 # trials_ = sorted(stim_dict[stim])
 
-                if full:
+                axs_ = axs
+
+                if full != None:
 
                     axs_ = axs[0]
 
                 if plot_stim:
 
-                    axs_= axs[1]
+                    axs_ = axs[1]
 
                 else:
 
-                    axs_ = axs
+                    axs_ = axs_
 
                 if len(stims)>1:
 
@@ -477,7 +496,7 @@ def plot_multipleStim(
                 elif not plot_stim:
 
                     axs_ = axs_[0]
-                                 
+
                 _, ymax, ymin = draw_singleStim(axs_, c, stim, trials_, type, ylabel=ylabel, 
                                                 stim_window=stim_window,func_=func_, legend=legend)
 
@@ -536,8 +555,11 @@ def plot_multipleStim(
 
                     ax_full = axs[-1,j]
 
-                _, ymax, ymin = draw_full(ax_full, c, sync, type=full, stim=stim)
+                _, ymax, ymin = draw_full(ax_full, c, sync, type=full, func_=None, stim=stim, ylabel=None)
 
+                # if ymax > y_max: y_max = ymax
+
+                # if ymin < y_min: y_min = ymin
 
                 ax_full.set_title("")
 
@@ -549,7 +571,8 @@ def plot_multipleStim(
 
                     axs_T = axs_T[j]
 
-                try:
+                if "%s_stim"%stim in globals():
+
                     func = globals()["%s_stim"%stim]
                     ## retrive parameters 
                     cell = c
@@ -574,24 +597,21 @@ def plot_multipleStim(
                     axs_T[0].set_xticklabels([])
                     axs_T[0].set_yticklabels([])
                     axs_T[1].set_title("")   
-
-                except:
-                    axs_T[0].axis('off')
-                    warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)  
-                            
-            if plot_stim: s = 1
-            else: s = 0
             
-            if isinstance(axs.T[j], np.ndarray):
+        
+        # if isinstance(axs.T[j], np.ndarray):
 
-                axs_ = axs.T[j]
-                
-            else:
-                axs_ = axs.T
+        #     axs_ = axs.T[j]
+            
+        # else:
+        #     axs_ = axs.T
+        
+        if plot_stim: axs= axs [1:]
+        if full != None: axs = axs[:-1]
 
-            for ax in axs_.flatten()[s:]:
+        for ax in axs.flatten():
 
-                ax.set_ylim(y_min+(y_min/5), y_max+(y_max/5))
+            ax.set_ylim(y_min-(abs(y_min/5)), y_max+(abs(y_max/5)))
 
         if share_y:
 
@@ -607,16 +627,16 @@ def plot_multipleStim(
 
                 for path in save_path:
 
-                    plt.savefig(r"%s/pop_average_%s%s.png" %(path,type,save_suffix), 
+                    plt.savefig(r"%s/pop_average_%s%s.png" %(path,type,save_suffix),
                                 bbox_inches="tight")
-                    plt.close(fig)
+
             else:
 
                 for path in save_path:
                 
                     plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.id,type,save_suffix),
                                 bbox_inches="tight")
-                    plt.close(fig)
+        plt.close(fig)
     
 def plot_FOV(
         rec,
@@ -629,8 +649,8 @@ def plot_FOV(
     Plot mean image of the FOV with masks of the passed cells.
     If cells_ids is list of lists, each sublist will be considered as a population.
 
-    - rec: Rec2P
-        Rec2P object from which the cells have been extracted.
+    - rec: R2p
+        R2p object from which the cells have been extracted.
     - cells: list 
         list of valid cells ids
     - k: int
@@ -700,7 +720,7 @@ def plot_heatmaps(
     Plot heatmap for all the cells.
 
     - cells: list
-        list of Cell2P objects
+        list of C2p objects
     - stim_dict: dict
         dict containing stim:[trials] items specyfying what to plot
     - stims: list
@@ -727,14 +747,19 @@ def plot_heatmaps(
 
         all_trials = set(sorted(all_trials))
 
-        fig, axs = plt.subplots(len(all_trials)+1,len(stims),figsize=(20,20))
+        add_row = 0
+        for stim in stims:
+            if "%s_stim"%stim in globals():
+                add_row=1
+
+        fig, axs = plt.subplots(len(all_trials)+add_row,len(stims),figsize=(20,20))
 
         cbar = False
 
         for i,trial in enumerate(all_trials):
 
-            i = i+1  
-
+            i = i+add_row
+            
             for j,stim in enumerate(stims):
 
                 if not isinstance(axs, np.ndarray):
@@ -782,7 +807,8 @@ def plot_heatmaps(
                     draw_heatmap(resp_all,vmin=vmin,vmax=vmax,cb_label=cb_label,cbar=cbar,ax=ax)
 
                     # try to plot stimuli
-                    try:
+                    if "%s_stim"%stim in globals():
+
                         func = globals()["%s_stim"%stim]
                         
                         ## retrive parameters 
@@ -798,18 +824,14 @@ def plot_heatmaps(
                         axs[0,j].grid('dashed',linewidth = 1.5, alpha = 0.25)
                         axs[0,j].set_xticklabels([])
                         axs[0,j].set_yticklabels([])
-                        axs[0,j].set_title("")   
-
-                    except:
-                        axs[0,j].axis('off')
-                        warnings.warn("Couldn't find a plotting function for stim '%s'"%stim, RuntimeWarning)
+                        axs[0,j].set_title("")
 
                 else:
                     ax.axis("off")
 
         if len(all_trials)>1:
 
-            for ax, trial in zip(axs[1:], all_trials):
+            for ax, trial in zip(axs[add_row:], all_trials):
                 ax[0].set_ylabel(trial,fontsize=18)
 
         else:
@@ -853,7 +875,8 @@ def plot_clusters(
     data,
     labels,
     markers=None,
-    algo='',
+    xlabel='',
+    ylabel='',
     l1loc='upper right',
     l2loc='upper left',
     groups_name='Group',
@@ -918,15 +941,17 @@ def plot_clusters(
 
     p = []
     l = []
-    for i,c in enumerate(clist[np.unique(labels)]*0.7):
+    for i,ix in enumerate(np.unique(labels)):
 
+        c = clist[ix]*0.7
         p.append(patches.Rectangle((0,0),1,1,fc=c))
-        l.append("POP %d"%i)
+        l.append("POP %d: %d ROIs"%(i,len(labels[labels==ix])))
 
     legend1 = ax.legend(p,
                         l,
                         # loc=l1loc,
-                        bbox_to_anchor=(1.2, 1.0)
+                        bbox_to_anchor=(1.35, 1.0),
+                        bbox_transform=plt.gca().transAxes
                         )
     ax.add_artist(legend1)
     
@@ -941,12 +966,13 @@ def plot_clusters(
         
         legend2 = ax.legend([plt.plot([],[],marker=allmarkers[m][0],color='k', ls="none")[0] for m in np.unique(markers)],
                             ['%s %d'%(groups_name,i) for i in np.unique(markers)],
-                            bbox_to_anchor=(1.22, 0.2),
+                            bbox_to_anchor=(1.35, 0),
+                            bbox_transform=plt.gca().transAxes
                             )
         ax.add_artist(legend2)
 
-    ax.set_xlabel("%s 1"%algo, fontsize=18)
-    ax.set_ylabel("%s 2"%algo, fontsize=18)
+    ax.set_xlabel(xlabel, fontsize=18)
+    ax.set_ylabel(ylabel, fontsize=18)
     ax.set_title("%d ROIs"%(len(Xax)))
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
@@ -957,7 +983,7 @@ def plot_clusters(
 
     if save!=None:
 
-        plt.savefig(save, bbox_inches='tight', bbox_extra_artists=(legend1,))
+        plt.savefig(save, bbox_extra_artists=(legend1,))
 
 def plot_sparse_noise(
         cells,
@@ -971,7 +997,7 @@ def plot_sparse_noise(
     """
     Plot sparse noise responses for each cell, overlying ON and OFF responses
     for each grid location.
-    - cells: list of Cell2P
+    - cells: list of C2p
         cells to be plotted
     - texture_dim: tuple
         tuple specifying the dimension of the texture matrix used for sparse noise stim

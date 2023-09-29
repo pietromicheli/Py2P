@@ -5,11 +5,11 @@ from tqdm import tqdm
 from sklearn.decomposition import PCA
 
 from .sync import Sync
-from .cell2p import Cell2p
+from .cell2p import C2p
 from Py2P.utils import *
 from Py2P.plot import plot_clusters
 
-class Rec2p:
+class R2p:
 
     """
     A recording master class
@@ -163,7 +163,7 @@ class Rec2p:
                 if not self.iscell[id][0]:
                     continue
 
-            cell = Cell2p(self, id)
+            cell = C2p(self, id)
             cell.analyze()
 
             if not keep_unresponsive and not cell.responsive:
@@ -295,7 +295,8 @@ class Rec2p:
         self,
         cells_ids=None,
         algo='pca',
-        n_components=2,
+        clusters='kmeans',
+        k=None,
         save_name='',
         **kwargs
         ):
@@ -309,8 +310,10 @@ class Rec2p:
             By thefault, all the cells present in the recording will be analyzed.
         - algo: str
             algorithm for demensionality reduction. Can be pca or tsne.
-        - n_components: int
-            number of component used by GMM for clustering.
+        - clusters: str
+            clustering algorithm. can be "kmeans" or "gmm" (gaussian mixture model)
+        - k: int
+            number of expected clusters 
         - **kwargs:
             any valid argument to parametrize compute_fingerprints() method
 
@@ -323,31 +326,41 @@ class Rec2p:
         if algo=='pca':
             
             # run PCA
-            transformed = PCA(n_components=2).fit_transform(fp)
+            pca = PCA(n_components=2)
+            transformed = pca.fit_transform(fp)
+            exp_var = pca.explained_variance_ratio_
+            xlabel = "PC1 (% {})".format(round(exp_var[0]*100,2))
+            ylabel = "PC2 (% {})".format(round(exp_var[1]*100,2))
 
         elif algo=='tsne':
 
             # if needed, go with Tsne
-            tsne_params =  {
-                    'n_components':2, 
-                    'verbose':1, 
-                    'metric':'cosine', 
-                    'early_exaggeration':4, 
-                    'perplexity':10, 
-                    'n_iter':3000, 
-                    'init':'pca', 
-                    'angle':0.1}
+            if tsne_params==None:
+                tsne_params =  {
+                        'n_components':2, 
+                        'verbose':1, 
+                        'metric':'cosine', 
+                        'early_exaggeration':4, 
+                        'perplexity':10, 
+                        'n_iter':3000, 
+                        'init':'pca', 
+                        'angle':0.9}
 
             transformed = TSNE_embedding(fp,**tsne_params)
+            xlabel = "Dimension 1"
+            ylabel = "Dimension 2"
 
         # clusterize
-        labels = GMM(transformed,n_components=n_components,covariance_type='diag')
+        # labels = GMM(transformed,n_components=n_components,covariance_type='diag')
+        if k == None:
+            k = find_optimal_kmeans_k(transformed)
 
-        if save_name:
-            plot_clusters(transformed,labels,algo=algo,save='%s_%s'%(save_name,algo))
+        if clusters == 'kmeans':
+            labels = k_means(transformed, k)
+        elif clusters == 'gmm':
+            labels = GMM(transformed,n_components=(k),covariance_type='diag')
 
-        else:
-            plot_clusters(transformed,labels,algo=algo,save='')
+        plot_clusters(transformed,labels,None,xlabel,ylabel,save=save_name)
 
         # get popos
         pops = []

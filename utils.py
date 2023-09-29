@@ -16,7 +16,7 @@ import numpy as np
 ###---UTILITY FUNCTIONS---###
 #############################
 
-CONFIG_FILE_TEMPLATE = r"%s/params.yaml" % pathlib.Path(__file__).parent.resolve()
+CONFIG_FILE_TEMPLATE = r"%s/core/params.yaml" % pathlib.Path(__file__).parent.resolve()
 DEFAULT_PARAMS = {}
 
 
@@ -42,7 +42,6 @@ def generate_params_file():
 
         return "params.yaml"
 
-
 def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
 
     """
@@ -59,7 +58,6 @@ def filter(s, wn, ord=6, btype="low", analog=False, fs=None, mode="filtfilt"):
         s_filtered = lfilter(b, a, s)
 
     return s_filtered
-
 
 def z_norm(s, include_zeros=True):
 
@@ -118,7 +116,6 @@ def lin_norm(s, lb=0, ub=1):
     """
     return (ub - lb) * ((s - s.min()) / (s.max() - s.min())) + lb
 
-
 def TSNE_embedding(data=None, **kwargs):
 
     if len(data) < 50:
@@ -149,14 +146,12 @@ def TSNE_embedding(data=None, **kwargs):
 
     return transformed
 
-
 def k_means(data, n_clusters):
 
     # run Kmeans
     kmeans = KMeans(n_clusters=n_clusters, init="k-means++", algorithm="auto").fit(data)
 
     return kmeans.labels_
-
 
 def GMM(data, **kwargs):
 
@@ -166,7 +161,6 @@ def GMM(data, **kwargs):
 
     print(gmm.converged_)
     return gm_labels
-
 
 def find_optimal_kmeans_k(x):
 
@@ -216,8 +210,16 @@ def find_optimal_kmeans_k(x):
 
     elbow = np.argmax(dcurv)
 
-    return round(x_plot[elbow])
+    plt.figure()
+    plt.plot(x_plot, fitted_curve)
+    plt.axvline(x_plot[elbow],0,fitted_curve.max(),color='r',linestyle='--',label='elbow')
+    plt.xlabel('K')
+    plt.ylabel('Sum_of_squared_distances')
+    plt.grid(alpha=0.5)
+    plt.legend()
+    plt.show()
 
+    return round(x_plot[elbow])
 
 def check_len_consistency(sequences, mode='trim', mean_len=10):
 
@@ -263,7 +265,6 @@ def check_len_consistency(sequences, mode='trim', mean_len=10):
             sequences_new.append(np.pad(seq,(len(seq)-max_len),mode='mean',stat_length=mean_len))
 
     return sequences_new
-
 
 def fit_oscillator(s, fs, plot_ps=False, freq_int=[0.2,0.2]):
 
@@ -322,7 +323,6 @@ def fit_oscillator(s, fs, plot_ps=False, freq_int=[0.2,0.2]):
 
     return {'f':freq_osc,'fopt':popt[0],'phi':popt[1],'freq_range':freq_range},optSin(t,popt[0],popt[1])
 
-
 def kill_freq(s, fs, f, freq_range, type='bs', lpcut=1.2):
 
     dt = 1/fs
@@ -342,7 +342,6 @@ def kill_freq(s, fs, f, freq_range, type='bs', lpcut=1.2):
     cut_s = filter(cut_s,lpcut,fs=fs)
 
     return cut_s
-
 
 def deoscillate(x, x_train, fs, lpcut=1.2, norm=True, plot=False, freq_int=[0.2,0.2]):
 
