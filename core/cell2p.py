@@ -21,19 +21,30 @@ class C2p:
         self.responsive = None
         self.analyzed_trials = None
 
+        self.params = rec.params
+        self.sync = rec.sync
+
         # reference data from rec object
         self.Fraw = rec.Fraw[id]
-        self.Fneu = rec.Fneu[id]
-        self.spks = rec.spks[id]
-        self.params = rec.params
 
-        # refrence usefull sync attibutes
-        self.sync = rec.sync
-        # self.stims_names = rec.sync.stims_names
-        # self.trials_names = rec.sync.trials_names
+        if isinstance(rec.Fneu,np.ndarray): 
+            self.Fneu = rec.Fneu[id]
+        else : self.Fneu = None
 
-        # subtract neuropil signal to raw signal
-        self.FrawCorr = self.Fraw - self.Fneu * self.params["neuropil_corr"]
+        if isinstance(rec.spks,np.ndarray): 
+            self.spks = rec.spks[id]
+            # z-score and filter spikes
+            self.zspks = np.where(
+            abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
+        )
+        else : self.spks = None
+
+        # subtract neuropil signal to raw signal if Fneu exists
+        if isinstance(self.Fneu,np.ndarray):
+            self.FrawCorr = self.Fraw - self.Fneu * self.params["neuropil_corr"]
+        else:
+            self.FrawCorr = self.Fraw
+
         # lowpass-filter raw
         self.FrawCorr = filter(self.FrawCorr, self.params["lowpass_wn"])
 
@@ -53,15 +64,10 @@ class C2p:
             ]
 
         else:
-
-            self.mean_baseline = np.mean(self.FrawCorr[: self.sync.sync_frames[0]])
+            # just take the mean of the recording
+            self.mean_baseline = np.median(self.FrawCorr)
             self.dff = (self.FrawCorr - self.mean_baseline) / self.mean_baseline
             self.dff_baseline = self.dff[: self.sync.sync_frames[0]]
-
-        # z-score and filter spikes
-        self.zspks = np.where(
-            abs(z_norm(self.spks)) < self.params["spks_threshold"], 0, z_norm(self.spks)
-        )
 
     def _compute_QI_(self, trials: np.ndarray):
 
@@ -163,9 +169,7 @@ class C2p:
                     ]
                 )
 
-            for trial_type in list(self.sync.sync_ds[stim].keys())[
-                :-1
-            ]:  # last item is stim_window
+            for trial_type in list(self.sync.sync_ds[stim].keys())[:-1]:  # last item is stim_window
 
                 trials_raw = []
                 trials_dff = []
@@ -203,43 +207,82 @@ class C2p:
                     trials_dff.append(resp_dff)
 
                     # spiking activity
-                    resp_spks = self.spks[
-                        trial[0]
-                        - self.params["pre_trial"] : trial[0]
-                        + trial_len
-                        + pause_len
-                    ]
+                    if isinstance(self.spks,np.ndarray):
+                        resp_spks = self.spks[
+                            trial[0]
+                            - self.params["pre_trial"] : trial[0]
+                            + trial_len
+                            + pause_len
+                        ]
 
-                    # z-scored spiking activity
-                    resp_zspks = self.zspks[
-                        trial[0]
-                        - self.params["pre_trial"] : trial[0]
-                        + trial_len
-                        + pause_len
-                    ]
+                        # z-scored spiking activity
+                        resp_zspks = self.zspks[
+                            trial[0]
+                            - self.params["pre_trial"] : trial[0]
+                            + trial_len
+                            + pause_len
+                        ]
 
-                    trials_spks.append(resp_spks)
-                    trials_zspks.append(resp_zspks)
+                        trials_spks.append(resp_spks)
+                        trials_zspks.append(resp_zspks)
 
-                # convert to array
+                # statistics on dff amd fraw
                 trials_raw = np.array(trials_raw)
                 trials_dff = np.array(trials_dff)
-                trials_spks = np.array(trials_spks)
-                trials_zspks = np.array(trials_zspks)
 
-                # calculate QI over df/f traces
-                # PENDING: implementation of ttest-based qi
-                qi = self._compute_QI_(z_norm(filter(trials_dff, 0.3)))
+                if trials_raw.shape[0] > 1:
 
-                if self.params["qi_metrics"]==0:
-                
-                    if qi > best_qi:
-                        best_qi = qi
+                    trials_fraw_avg = np.mean(trials_raw, axis=0)
+                    trials_fraw_std = np.std(trials_raw, axis=0)
+                    trials_dff_avg = np.mean(trials_dff, axis=0)
+                    trials_dff_std = np.std(trials_dff, axis=0)
 
                 else:
 
-                    if qi < best_qi:
-                        best_qi = qi
+                    trials_fraw_avg = trials_raw[0]
+                    trials_fraw_std = 0
+                    trials_dff_avg = trials_dff[0]
+                    trials_dff_std = 0
+
+                # statistics on spks and zspks
+                if isinstance(self.spks,np.ndarray) :
+
+                    trials_spks = np.array(trials_spks)
+                    trials_zspks = np.array(trials_zspks)
+
+                    if trials_spks.shape[0] > 1:
+
+                        trials_spks_avg = np.mean(trials_spks, axis=0)
+                        trials_spks_std = np.std(trials_spks, axis=0)
+                        trials_zspks_avg = np.mean(trials_zspks, axis=0)
+                        trials_zspks_std = np.std(trials_zspks, axis=0)
+
+                    else:
+                        trials_spks_avg = trials_spks[0]
+                        trials_spks_std = 0
+                        trials_zspks_avg = trials_zspks[0]
+                        trials_zspks_std = 0
+                    
+                else:
+                    trials_spks_avg = None
+                    trials_spks_std = None
+                    trials_zspks_avg = None
+                    trials_zspks_std = None
+
+                # calculate QI over df/f traces
+                # PENDING: implementation of ttest-based qi
+                if trials_dff.shape[0] > 1:
+                    qi = self._compute_QI_(z_norm(filter(trials_dff, 0.3)))
+
+                    if self.params["qi_metrics"]==0:
+                    
+                        if qi > best_qi:
+                            best_qi = qi
+                    else:
+
+                        if qi < best_qi:
+                            best_qi = qi
+                else: qi = None
 
                 on = self.params["pre_trial"]
                 off = self.params["pre_trial"] + trial_len
@@ -249,23 +292,30 @@ class C2p:
 
                 analyzed_trials[stim] |= {
                     trial_type: {
-                        "average_raw": np.mean(trials_raw, axis=0),
-                        "std_raw": np.mean(trials_raw, axis=0),
+                        "average_raw":trials_fraw_avg,
+                        "std_raw": trials_fraw_std,
                         "trials_dff": trials_dff,
-                        "average_dff": np.mean(trials_dff, axis=0),
-                        "std_dff": np.std(trials_dff, axis=0),
-                        "average_spks": np.mean(trials_spks, axis=0),
-                        "std_spks": np.std(trials_spks, axis=0),
-                        "average_zspks": np.mean(trials_zspks, axis=0),
-                        "std_zspks": np.std(trials_zspks, axis=0),
+                        "average_dff": trials_dff_avg,
+                        "std_dff": trials_dff_std,
+                        "average_spks": trials_spks_avg,
+                        "std_spks": trials_spks_std,
+                        "average_zspks": trials_zspks_avg,
+                        "std_zspks": trials_zspks_std,
                         "QI": qi,
                         "window": (on, off),
                     }
                 }
 
         self.analyzed_trials = analyzed_trials
-        self.qi = best_qi
-        self.is_responsive()
+
+        if best_qi != 0:
+            self.qi = best_qi
+            self.is_responsive()
+        else:
+            # if was impossible to compute QI because the data contain only
+            # a single trial for every stimulus, assume is responsive
+            self.qi = None
+            self.responsive = True 
 
         return analyzed_trials
 

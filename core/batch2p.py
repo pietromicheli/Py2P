@@ -14,29 +14,30 @@ class B2p:
 
     """
 
-    def __init__(self, data_dict: dict, groups={}):
+    def __init__(self, loaders:list):
 
         """
         Create a Batch2P object from a data dictionary.
 
-        - data_dict: dict
-            A dictionary where each key is an absolute path to the .npy files
-            of a recording, and its vlue is a Sync object generated for that recording.
-            Something like {data_path_rec0:Sync_rec0,...,data_path_recN:Sync_recN}
-            for a Batch2P object containing N independent recordings.
-        - groups: dict
-            A dictionary for assigning each recording to a group. This is useful for keeping
-            joint analysis of recordings performed in different conditions (e.g. control and treated).
-            The keys of the dictionary must be the same as data_dict (datapaths), and the values int numbers.
-            By default, all recordings loaded are assigned to group 0.
+        - loaders
+            A list of Dataloaders containing the data and the sync of each recording.
         """
 
-        # be sure that the sync object of all the recordings share at least 1 stimulus.
+        # instantiate the Rec2P objects
+        self.recs = {}
+        rec_list = []
+        for rec_id,ld in enumerate(loaders):
+
+            print("\n> creating R2p obj with index: %d:"%rec_id)
+            rec = R2p(ld)
+            self.recs |= {rec_id:rec}
+            rec_list.append(rec)
+
+        # be sure that the sync object (if present) of all the recordings share at least 1 stimulus.
         # only shared stimuli will be used.
 
         self.stims_trials_intersection = {}
-
-        stims_allrec = [sync.stims_names for sync in data_dict.values()]
+        stims_allrec = [rec.sync.stims_names for rec in rec_list]
 
         # start from minimal stim set
         stims_intersection = set(stims_allrec[np.argmin([len(s) for s in stims_allrec])])
@@ -48,39 +49,20 @@ class B2p:
         # also, for all the shared stimuli,
         # select only trials type are shared for that specific stimulus by all recs.
 
-        for stim in stims_intersection:
+        for stim in list(stims_intersection):
 
-            # start with trials for stimulus "stim" in first sync object
-            all_trials = list(list(data_dict.values())[0].sync_ds[stim].keys())[:-1]
+            # start with trials for stimulus "stim" in the sync_ds of first loader
+            trials = list(rec_list[0].sync.sync_ds[stim].keys())[:-1]
 
-            trials_intersection = set(all_trials)
+            trials_intersection = set(trials)
 
-            for sync in list(data_dict.values())[1:]:
+            for rec in rec_list[1:]:
 
+                trials = list(rec.sync.sync_ds[stim].keys())[:-1]
                 # last item is "window_len"
-                trials_intersection.intersection(
-                    set(list(sync.sync_ds[stim].keys())[:-1])
-                )
+                trials_intersection.intersection(set(trials))
 
             self.stims_trials_intersection |= {stim: list(trials_intersection)}
-
-        # generate params.yaml
-        generate_params_file()
-
-        # instantiate the Rec2P objects
-        self.recs = {}
-        self.groups = groups
-
-        for rec_id, (data_path, sync) in enumerate(data_dict.items()):
-
-            if data_path not in groups:
-                group_id = 0
-
-            else:
-                group_id = groups[data_path]
-
-            rec = R2p(data_path, sync)
-            self.recs |= {rec_id: (rec, group_id)}
 
         self.cells = None
         self.populations = []
@@ -93,8 +75,9 @@ class B2p:
         """
 
         for rec in self.recs:
-
-            self.recs[rec][0].load_params()
+            
+            print("> Rec %d:"%rec)
+            self.recs[rec].load_params()
 
     def get_cells(self):
 
@@ -106,11 +89,11 @@ class B2p:
         """
 
         self.cells = {}
+        groups = []
+        for (rec_id, rec) in self.recs.items():
 
-        for (rec_id, value) in self.recs.items():
-
-            rec = value[0]
-            group_id = value[1]
+            group_id = rec.group
+            groups.append(group_id)
 
             # retrive cells for each recording
             rec.get_cells()
@@ -124,7 +107,7 @@ class B2p:
                 cell.id = new_id
 
         # RETRIVE THE GROUPS
-        self.cells_groups = {g:{} for g in set(self.groups.values())}
+        self.cells_groups = {g:{} for g in set(groups)}
 
         for id,cell in self.cells.items():
             for g in self.cells_groups:

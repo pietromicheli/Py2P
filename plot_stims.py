@@ -15,7 +15,7 @@ def chirp_stim(
     BG = np.ones(int(2*fr))*0.5
     t_fm = np.linspace(0,20,int(8*fr))
     FM = (chirp(t_fm,0.2,40,1)+1)/2
-    freq = 0.9 #0.55
+    freq = 2 #0.55
     ttot = 12/freq
     t_am = np.linspace(0,ttot,int(ttot*fr))
     # a_am = np.linspace(0.01,0.5,int(21*fr))

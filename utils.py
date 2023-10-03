@@ -38,7 +38,7 @@ def generate_params_file():
 
     else:
 
-        print("> Using the parameters file found in data_path.")
+        print("> Using the parameters file found in current dir.")
 
         return "params.yaml"
 

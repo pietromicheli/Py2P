@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import io
+import os
 import json
 
 
@@ -24,7 +25,7 @@ class Sync:
         self,
         sync_file: str,
         stims_sequence_file: str,
-        trials_names: dict):
+        trials_names: dict = None):
 
         """
         Create a sync data structure from scanbox metadata file.
@@ -53,14 +54,23 @@ class Sync:
 
         """
         self.__init__()
-        
+
+        # read sync file
+        ext = os.path.splitext(sync_file)[1]
+        if ext == '.mat':
+            self.sync_frames = np.squeeze(io.loadmat(sync_file)["info"][0][0][0])
+        elif ext == '.npy':
+            self.sync_frames = np.load(sync_file)
+
+        # read stim dict
         with open(stims_sequence_file, "r") as f:
 
             self.stims_sequence = json.load(f) 
 
-        self.sync_frames = np.squeeze(io.loadmat(sync_file)["info"][0][0][0])
         self.stims_names = list(self.stims_sequence.keys())
-        self.trials_names = trials_names
+        
+        if trials_names == None:
+            trials_names = {}
 
         """
         Generate a data structure where to store all the onset and offset frames
@@ -80,47 +90,47 @@ class Sync:
             for trial_type in np.unique(sequence):
 
                 trial_len = self.sync_frames[i + 1] - self.sync_frames[i]
-                pause_len = self.sync_frames[i + 2] - self.sync_frames[i + 1]
+
+                if (i+2) < len(self.sync_frames):
+                    pause_len = self.sync_frames[i + 2] - self.sync_frames[i + 1]
+                else: 
+                    pause_len = 0
+
+                if trial_type in trials_names:
+                    trial_name = trials_names[trial_type]
+
+                else: 
+                    trial_name = trial_type
+                    trials_names |= {trial_type:trial_type}
+                    
                 sync_ds[stim] |= {
-                    self.trials_names[trial_type]: {
+                    trial_name: {
                         "trials": [],
                         "trial_len": trial_len,
                         "pause_len": pause_len,
                     }
                 }
 
-            for trial in sequence:
+            for trial_type in sequence:
 
-                sync_ds[stim][self.trials_names[trial]]["trials"].append(
+                if trials_names != None:
+                    trial_name = trials_names[trial_type]
+                else: 
+                    trial_name = trial_type
+
+                sync_ds[stim][trial_name]["trials"].append(
                     (self.sync_frames[i], self.sync_frames[i + 1])
                 )
 
                 i += 2
 
             stim_end = (self.sync_frames[i - 1]+
-                        sync_ds[stim][self.trials_names[trial]]["pause_len"])
+                        sync_ds[stim][trial_name]["pause_len"])
 
             sync_ds[stim] |= {"stim_window": (stim_start, stim_end)}
-
-            # # make sure that all the trials have the same len across stimuli
-            # for trial_type in self.trials_names.values():
-
-            #     # trial len of first stimuli as reference
-            #     trial_len = sync_ds[self.stims_names[0]][trial_type]["trial_len"]
-            #     pause_len = sync_ds[self.stims_names[0]][trial_type]["pause_len"]
-
-            #     for stim in self.stims_names:
-
-            #         if sync_ds[stim][trial_type]["trial_len"] != trial_len:
-
-            #             sync_ds[stim][trial_type]["trial_len"] = trial_len
-                        
-            #         if sync_ds[stim][trial_type]["pause_len"] != pause_len:
-
-            #             sync_ds[stim][trial_type]["pause_len"] = pause_len
-
         
         self.sync_ds = sync_ds
+        self.trials_names = trials_names
 
         return self
 
@@ -215,3 +225,13 @@ class Sync:
         self.sync_ds['sparse_noise']|={'stim_window':(self.sync_frames[0],self.sync_frames[-1])}
 
         return self  
+    
+    def minimal_data_structure(self, nframes):
+
+        """
+        Generate a default minimalistic sync structure with one stimulus and 
+        one trial
+        """
+
+        pass
+
