@@ -25,16 +25,16 @@ parser.add_argument('-m', '--merge', action='store_true', help='merge all the re
 
 def main(args):
 
-    dataDirs = args.data_paths
-
+    dataDirs =  args.data_paths
     if args.save_paths:
         saveDirs = args.save_paths
     else:
         saveDirs = dataDirs
 
     if len(dataDirs) != len(saveDirs):
+        print()
 
-        print("> ERROR: You can't specify only one save_path if multiple data_path are provided!")
+        print("> ERROR: The number of save paths should match the number of data paths!")
         return 0
 
     merge = args.merge
@@ -56,31 +56,36 @@ def main(args):
 
     for i,(dataDir,saveDir) in enumerate(zip(dataDirs,saveDirs)):
 
-        print('>\n DATA PATH: {}'.format(dataDir))
+        print('\n> DATA PATH: {}'.format(dataDir))
 
         # check if multiple recordings exist in the current data_path
-        files =  [file for file in os.listdir(dataDir) 
-                    if file.endswith(ops['input_format'])]
+        files =  natsorted([file for file in os.listdir(dataDir) 
+                    if file.endswith(ops['input_format'])])
 
-        rec_names = natsorted(['_'.join(Path(file).stem.split('_')[:3]) for file in files])
+        rec_names = ['_'.join(Path(file).stem.split('_')[:3]) for file in files]
+        print('> Rec Files:')
+        for rname in rec_names: print(rname)
 
         if merge:
 
             # check if there are .mat files to merge
-            mat_names = [name+'.mat' for name in rec_names if name+'.mat' in os.listdir(dataDir)]
+            mat_names = natsorted([name+'.mat' for name in rec_names if name+'.mat' in os.listdir(dataDir)])
 
             if len(mat_names) == len(rec_names):
 
-                print('> found .mat sync file. Merging ...')
+                print('> found .mat sync files. Merging:')
+                for mname in mat_names: print(mname)
 
                 # join the mat files
-                offsets = [0]
+                offset = 0
+                offsets = [offset]
                 for file in files[:-1]:
 
                     with TiffFile(os.path.join(dataDir,file)) as tif:
                         # Get the number of pages, which corresponds to the number of frames
                         n_frames = len(tif.pages)
-                        offsets.append(n_frames)
+                        offset += n_frames
+                        offsets.append(offset)
                 
                 # merge mat files
                 merge_mat_files([os.path.join(dataDir,name) for name in mat_names],offsets)

@@ -3,6 +3,8 @@ import numpy as np
 from .rec2p import R2p 
 from Py2P.utils import *
 from Py2P.plot import plot_clusters
+from sklearn.decomposition import PCA
+from umap import UMAP
 
 class B2p:
 
@@ -140,7 +142,7 @@ class B2p:
         cells_ids=None,
         stim_trials_dict=None, 
         type="dff", 
-        normalize="z", 
+        normalize="zscore", 
         smooth=True
     ):
 
@@ -206,11 +208,11 @@ class B2p:
 
                     concat_stims = np.concatenate((concat_stims, r))
 
-            if normalize == "lin":
+            if normalize == "linear":
 
                 concat_stims = lin_norm(concat_stims, -1, 1)
 
-            elif normalize == "z":
+            elif normalize == "zscore":
 
                 concat_stims = z_norm(concat_stims, True)
 
@@ -289,8 +291,19 @@ class B2p:
                         'angle':0.9}
 
             transformed = TSNE_embedding(fp,**tsne_params)
-            xlabel = "Dimension 1"
-            ylabel = "Dimension 2"
+            xlabel = "tsne 1"
+            ylabel = "tsne 2"
+
+        elif algo=='umap':
+            if umap_params==None:
+                umap_params =  {
+                        'n_components':2, 
+                        'n_neighbors':15, 
+                        'min_dist': 0.1}
+                
+            umap = UMAP(**umap_params)
+            transformed = umap.fit_transform(fp)
+
 
         # clusterize
         # labels = GMM(transformed,n_components=n_components,covariance_type='diag')

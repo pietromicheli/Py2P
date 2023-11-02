@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import io 
+from tifffile import TiffFile
 import os
 import sys
 
@@ -9,14 +10,14 @@ def merge_mat_files(mat_files, offsets):
     merge sync mat file, adding to each value the offset specified.
 
     -mat_files (list of str):
-    list of .mat sync filenames to concatenate
+    list of abslute paths to the .mat sync files to concatenate
 
     -offsets (list of int)
     list of offset values to add to each file. N.B: offset length should be equal to mat_files length
 
     """
 
-    path = os.path.split(mat_files[0])[0]
+    path = os.path.split(mat_files[0])[0]    
 
     sync_conc = None
 
@@ -40,8 +41,20 @@ def merge_mat_files(mat_files, offsets):
 
     print("> sync file merged and saved in %s"%path)
 
-    return path + "sync_merged.mat"
+    return path + "\sync_merged.mat"
 
+def get_nframes_tiff(tif_filename):
+
+    """
+    
+    Get number of pages of input tiffile
+    """
+
+    with TiffFile(tif_filename) as tif:
+        # Get the number of pages, which corresponds to the number of frames
+        n_frames = len(tif.pages)
+
+    return n_frames
 
 if __name__ == "__main__":
 

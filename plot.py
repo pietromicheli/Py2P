@@ -1000,7 +1000,7 @@ def plot_clusters(
 
     if save!=None:
 
-        plt.savefig(save, bbox_extra_artists=(legend1,))
+        plt.savefig(save, bbox_extra_artists=(legend1,legend2), bbox_inches='tight')
 
 def plot_sparse_noise(
         cells,

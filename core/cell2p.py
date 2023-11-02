@@ -101,26 +101,26 @@ class C2p:
 
         elif mode_rmi == "peak":
 
-            a_ = np.max(a)
-            b_ = np.max(b)
+            a_ = np.max(abs(a))
+            b_ = np.max(abs(b))
 
         rmi = (a_ - b_) / (a_ + b_)
 
         return rmi, a_, b_
 
-    def _compute_snr_imp_(self, a, b):
+    def _compute_snr_imp_(self, a, b, cutoff=0.2):
 
         """
         Extract noise and signal components from each signal,
         compute SNR and return ratio between SNRs
         """
 
-        a_s = filter(a, 0.2, btype="low")
-        a_n = filter(a, 0.2, btype="high")
+        a_s = filter(a, cutoff, btype="low")
+        a_n = filter(a, cutoff, btype="high")
         snr_a = abs(np.mean(a_s) / np.std(a_n))
 
-        b_s = filter(b, 0.2, btype="low")
-        b_n = filter(b, 0.2, btype="high")
+        b_s = filter(b, cutoff, btype="low")
+        b_n = filter(b, cutoff, btype="high")
         snr_b = abs(np.mean(b_s) / np.std(b_n))
 
         return snr_a / snr_b, snr_a, snr_b
