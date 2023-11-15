@@ -61,6 +61,7 @@ def full_field_stim(
 
     if ax != None:
         ax.plot(stim_conc,c='k')
+        ax.set_ylim(0,1)
         ax.axvspan(stim_start, stim_end, color='y', alpha=0.1)
         ax.set_ylabel("brightness", fontsize=18)
 
