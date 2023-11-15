@@ -123,8 +123,8 @@ def main(args):
             saveDirs.pop(i)
             saveDirs[i:i] = new_saveDirs
 
-    # run suite2p for all the recordings found
-    # for dataDir,saveDir in zip(dataDirs,saveDirs):
+        # run suite2p for all the recordings found
+        print("\n> Running Suite2p ...")
 
         db = {
             'data_path': [dataDir],
