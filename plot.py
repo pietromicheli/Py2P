@@ -4,6 +4,8 @@ from matplotlib import pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib import colors
 from matplotlib import cm,patches
+from matplotlib.gridspec import GridSpec
+
 import warnings
 
 # from .core import *
@@ -417,7 +419,8 @@ def plot_multipleStim(
         add_full = 1
 
     for stim in stims:
-        if plot_stim and "%s_stim"%stim in globals():
+        stim_name_func = stim.split('-')[0]
+        if plot_stim and "%s_stim"%stim_name_func in globals():
 
             add_stim = 1
 
@@ -429,19 +432,35 @@ def plot_multipleStim(
     # main loop
     for c in cells:
 
+        # try gridspec
         if group_trials:
-
-            fig, axs = plt.subplots(
-                figsize=(9*n_stims, 3*(2+add_row)),nrows=(1+add_row),
-                  ncols=n_stims, sharex=share_x, sharey=share_y
-            )
-
+            figsize = (9*n_stims, 3*(2+add_row))
+            nrows = (1+add_row)
         else:
+            figsize = (9*n_stims, 6*n_trials+add_row)
+            nrows=(n_trials+add_row)
 
-            fig, axs = plt.subplots(
-                figsize=(9*n_stims, 6*n_trials+add_row), nrows=(n_trials+add_row),
-                 ncols=n_stims, sharex=share_x, sharey=share_y
-            )
+        height_ratios = [1]*nrows
+
+        if plot_stim:
+            height_ratios[0] /= 2
+                       
+        fig, axs = plt.subplots(nrows=nrows, ncols=n_stims, figsize=figsize,gridspec_kw={'height_ratios': height_ratios})
+
+
+        # if group_trials:
+
+        #     fig, axs = plt.subplots(
+        #         figsize=(9*n_stims, 3*(2+add_row)),nrows=(1+add_row),
+        #           ncols=n_stims, sharex=share_x, sharey=share_y
+        #     )
+
+        # else:
+
+        #     fig, axs = plt.subplots(
+        #         figsize=(9*n_stims, 6*n_trials+add_row), nrows=(n_trials+add_row),
+        #          ncols=n_stims, sharex=share_x, sharey=share_y
+        #     )
 
         if average:
 
@@ -581,9 +600,10 @@ def plot_multipleStim(
 
                     axs_T = axs_T[j]
 
-                if "%s_stim"%stim in globals():
+                stim_name_func = stim.split('-')[0]
+                if "%s_stim"%stim_name_func in globals():
 
-                    func = globals()["%s_stim"%stim]
+                    func = globals()["%s_stim"%stim_name_func]
                     ## retrive parameters 
                     cell = c
                     if isinstance(c, list):
@@ -646,7 +666,7 @@ def plot_multipleStim(
                 
                     plt.savefig(r"%s/ROI_#%s_%s%s.png" %(path,c.id,type,save_suffix),
                                 bbox_inches="tight")
-        # plt.close(fig)
+        plt.close(fig)
     
 def plot_FOV(
         rec,
@@ -722,7 +742,7 @@ def plot_heatmaps(
     normalize=False,
     save=True,
     save_path="",
-    name="",
+    save_name="",
     cb_label="",
 ):
 
@@ -733,10 +753,6 @@ def plot_heatmaps(
         list of C2p objects
     - stim_dict: dict
         dict containing stim:[trials] items specyfying what to plot
-    - stims: list
-        list of stimuli names to plot
-    - trials: list
-        list of trials names to plot
     - type: str
         can be "dff" or "zspks"
     - full: str
@@ -744,7 +760,7 @@ def plot_heatmaps(
         argoument will be ignored
     """
 
-        
+    if not isinstance(save_path,list): save_path = [save_path]
     # plot averages
     if full == None:
 
@@ -759,10 +775,22 @@ def plot_heatmaps(
 
         add_row = 0
         for stim in stims:
-            if "%s_stim"%stim in globals():
+
+            stim_name_func = stim.split('-')[0]
+            if "%s_stim"%stim_name_func in globals():
                 add_row=1
 
-        fig, axs = plt.subplots(len(all_trials)+add_row,len(stims),figsize=(25,20))
+        # fig, axs = plt.subplots(len(all_trials)+add_row,len(stims),figsize=(25,20))
+
+        # try gridspec
+        nrows = len(all_trials)+add_row
+        height_ratios = [1]*nrows
+
+        if add_row:
+            height_ratios[0] /= 2
+                       
+        fig, axs = plt.subplots(nrows=nrows, ncols=len(stims),figsize=(25,20), gridspec_kw={'height_ratios': height_ratios})
+
         cbar_ax = fig.add_axes([.3, .05, .4, .015])
         cbar = False
 
@@ -797,11 +825,11 @@ def plot_heatmaps(
                     # convert to array
                     resp_all = np.array(resp_all)
 
-                    if normalize == "lin":
+                    if normalize == "linear":
 
                         resp_all = lin_norm(resp_all)
 
-                    elif normalize == "z":
+                    elif normalize == "zscore":
 
                         resp_all = z_norm(resp_all, True)
 
@@ -817,9 +845,10 @@ def plot_heatmaps(
                     draw_heatmap(resp_all,vmin=vmin,vmax=vmax,cb_label=cb_label,cbar=cbar,ax=ax)    
 
                     # try to plot stimuli
-                    if "%s_stim"%stim in globals():
+                    stim_name_func = stim.split('-')[0]
+                    if "%s_stim"%stim_name_func in globals():
 
-                        func = globals()["%s_stim"%stim]
+                        func = globals()["%s_stim"%stim_name_func]
                         
                         ## retrive parameters 
                         cell = cells[0]
@@ -828,14 +857,18 @@ def plot_heatmaps(
 
                         stim_len = len(resp_all[0])
 
-                        func(axs[0,j], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
+                        if not isinstance(axs[0], np.ndarray): axs_ = np.array([axs])
+                        else: axs_ = axs
 
-                        axs[0,j].set_xlim(0,len(resp_all[0]))
-                        axs[0,j].spines[['bottom', 'left', 'right', 'top']].set_visible(False)
-                        axs[0,j].grid('dashed',linewidth = 1.5, alpha = 0.25)
-                        axs[0,j].set_xticklabels([])
-                        axs[0,j].set_yticklabels([])
-                        axs[0,j].set_title("")
+                        func(axs_[0,j], pad_l=pad_l, stim_len=int(stim_len), fr=fr)
+
+                        axs_[0,j].set_xlim(0,len(resp_all[0]))
+                        axs_[0,j].spines[['bottom', 'left', 'right', 'top']].set_visible(False)
+                        axs_[0,j].grid('dashed',linewidth = 1.5, alpha = 0.25)
+                        axs_[0,j].set_xticklabels([])
+                        axs_[0,j].set_yticklabels([])
+                        axs_[0,j].set_title("")
+
 
                 else:
                     ax.axis("off")
@@ -847,11 +880,16 @@ def plot_heatmaps(
         if len(all_trials)>1:
 
             for ax, trial in zip(axs[add_row:], all_trials):
-                ax[0].set_ylabel(trial,fontsize=18)
+                if isinstance(ax, np.ndarray):
+                    ax[0].set_ylabel(trial,fontsize=18)
+                else:
+                    ax.set_ylabel(trial,fontsize=18)
 
         else:
-            ax[1].set_ylabel(trial,fontsize=18)
-        
+            if isinstance(ax, np.ndarray):
+                ax[1].set_ylabel(trial,fontsize=18)
+            else:
+                ax.set_ylabel(trial,fontsize=18)        
 
     # plot full traces
     else:
@@ -865,11 +903,11 @@ def plot_heatmaps(
         # convert to array
         resp_all = np.array(resp_all)
 
-        if normalize == "lin":
+        if normalize == "linear":
 
             resp_all = lin_norm(resp_all)
 
-        elif normalize == "z":
+        elif normalize == "zscore":
 
             resp_all = z_norm(resp_all, True)
             
@@ -885,8 +923,9 @@ def plot_heatmaps(
     fig.suptitle("Population Average - %d ROIs"%len(cells), fontsize=18)
 
     if save: 
-        plt.savefig(r"%s/%s.png"%(save_path,name), bbox_inches="tight")
-        # plt.close(fig)
+        for spath in save_path:
+            plt.savefig("%s%s.png"%(spath,save_name), bbox_inches="tight")
+        plt.close(fig)
     
 def plot_clusters(
     data,
@@ -942,7 +981,7 @@ def plot_clusters(
     scatters= []
     for m in np.unique(markers):
 
-        marker = allmarkers[m][0]
+        marker = str(allmarkers[m][0])
         ix = np.where(markers==m)[0]
 
         s = ax.scatter(
@@ -977,7 +1016,9 @@ def plot_clusters(
 
         handles = []
         for m in np.unique(markers):
-            h = mlines.Line2D([], [], marker=m, linestyle='None',
+
+            marker = str(allmarkers[m][0])
+            h = mlines.Line2D([], [], marker=marker, linestyle='None',
                           markersize=10, label='%s %d'%(groups_name,i))
             handles.append(h)
         
