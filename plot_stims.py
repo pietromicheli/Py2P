@@ -29,7 +29,7 @@ def chirp_stim(
     stim_conc = np.concatenate([stim_conc, pad_right])
 
     if ax != None:
-        ax.plot(stim_conc,c='k')
+        ax.plot(stim_conc,c='k',linewidth=2)
         green_x = len(stim_conc)-len(pad_right)-int(8.5*fr)
         blue_x = len(stim_conc)-len(pad_right)-int(3.5*fr)
         ax.axvline(green_x, 0, 1, linewidth=20, color='g',alpha=0.3)
@@ -60,7 +60,7 @@ def full_field_stim(
     stim_end = len(stim_conc)-len(pad_right)
 
     if ax != None:
-        ax.plot(stim_conc,c='k')
+        ax.plot(stim_conc,c='k',linewidth=2)
         ax.set_ylim(0,1)
         ax.axvspan(stim_start, stim_end, color='y', alpha=0.1)
         ax.set_ylabel("brightness", fontsize=18)
@@ -89,7 +89,7 @@ def contrast_ramp_stim(
    stim_conc = np.concatenate([stim_conc, pad_right])
 
    if ax!=None:
-    ax.plot(stim_conc,c='k')
+    ax.plot(stim_conc,c='k',linewidth=2)
     
     ax.set_xticks(ax.get_xticks()[1:-1], (ax.get_xticks()[1:-1]/fr).astype(int))
     ax.set_ylabel("brightness", fontsize=18)
