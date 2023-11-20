@@ -66,6 +66,8 @@ class B2p:
 
             self.stims_trials_intersection |= {stim: list(trials_intersection)}
 
+        self.stims_trials_intersection = dict(sorted(self.stims_trials_intersection .items()))
+
         self.cells = None
         self.populations = []
 
