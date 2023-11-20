@@ -16,12 +16,14 @@ from .utils import z_norm, lin_norm, check_len_consistency
 warnings.simplefilter('always')
 
 TRIALS_C = {
-   0: "#169b4e",
-   1: "#1b46a2",
-   2: "#b03028",
-   3: "#b194e4",
-   4: "#82d5d2",
+   0:  (0.08,0.6,0.3), #"#169b4e",
+   1:  (0.1,0.27,0.63), #"#1b46a2",
+   2:  (0.69,0.19,0.15), #"#b03028",
+   3:  (0.69,0.6,0.9), #"#b194e4",
   }  # [IPSI, CONTRA, BOTH, ...]
+
+
+
 
 # POPS_C = list(colors.TABLEAU_COLORS.keys())
 POPS_C  = [np.array(c) for c in sns.color_palette('pastel')]
@@ -141,7 +143,7 @@ def draw_singleStim(
         if isinstance(error,np.ndarray):
 
             ax.fill_between(
-                x, r + error, r - error, color=TRIALS_C[inverted_trials_dict[trial]], alpha=0.1
+                x, r + error, r - error, color=np.array((TRIALS_C[inverted_trials_dict[trial]]))*0.3, alpha=0.3
             )
 
         if stim_window:
@@ -626,7 +628,7 @@ def plot_multipleStim(
                     axs_T[0].grid('dashed',linewidth = 1.5, alpha = 0.25)
                     axs_T[0].set_xticklabels([])
                     axs_T[0].set_yticklabels([])
-                    axs_T[1].set_title("")   
+                    axs_T[0].set_title(stim, fontsize=15)   
             
         
         # if isinstance(axs.T[j], np.ndarray):
@@ -639,9 +641,9 @@ def plot_multipleStim(
         if plot_stim: axs= axs [1:]
         if full != None: axs = axs[:-1]
 
-        for ax in axs.flatten():
+        # for ax in axs.flatten():
 
-            ax.set_ylim(y_min-(abs(y_min/5)), y_max+(abs(y_max/5)))
+        #     ax.set_ylim(y_min-(abs(y_min/5)), y_max+(abs(y_max/5)))
 
         if share_y:
 
@@ -867,7 +869,7 @@ def plot_heatmaps(
                         axs_[0,j].grid('dashed',linewidth = 1.5, alpha = 0.25)
                         axs_[0,j].set_xticklabels([])
                         axs_[0,j].set_yticklabels([])
-                        axs_[0,j].set_title("")
+                        axs_[0,j].set_title(stim, fontsize=15)
 
 
                 else:
@@ -881,13 +883,15 @@ def plot_heatmaps(
 
             for ax, trial in zip(axs[add_row:], all_trials):
                 if isinstance(ax, np.ndarray):
-                    ax[0].set_ylabel(trial,fontsize=18)
+                    for ax_ in ax:
+                        ax_.set_ylabel(trial,fontsize=18)
                 else:
                     ax.set_ylabel(trial,fontsize=18)
 
         else:
             if isinstance(ax, np.ndarray):
-                ax[1].set_ylabel(trial,fontsize=18)
+                for ax_ in ax:
+                        ax_.set_ylabel(trial,fontsize=18)
             else:
                 ax.set_ylabel(trial,fontsize=18)        
 
@@ -1096,7 +1100,7 @@ def plot_sparse_noise(
                 c = 'k'
 
             axs[row,col].plot(r,linewidth=0.7,alpha=0.7,c=c,label=str(cell.analyzed_trials['sparse_noise'][trial]["QI"]<0.05))
-            axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=c)
+            axs[row,col].fill_between(x,r+std,r-std,alpha=0.1,color=np.array(c)*0.3)
             axs[row,col].axvspan(pre_trial,(pre_trial+int(sr/freq)),alpha=0.1,color='y')
             axs[row,col].legend(fontsize=9)
             if (row+col)==0:
